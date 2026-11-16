@@ -1,0 +1,6 @@
+{
+  "name": "HuevoControl — Directo de Granja",
+  "description": "Aplicación de escritorio para Windows del dueño y backend de sincronización en tiempo real para Directo de Granja.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

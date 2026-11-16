@@ -1,0 +1,213 @@
+---
+name: Obsidian Harvest Executive
+colors:
+  surface: '#10131a'
+  surface-dim: '#10131a'
+  surface-bright: '#363941'
+  surface-container-lowest: '#0b0e15'
+  surface-container-low: '#191b23'
+  surface-container: '#1d1f27'
+  surface-container-high: '#272a32'
+  surface-container-highest: '#32353d'
+  on-surface: '#e1e2ec'
+  on-surface-variant: '#c3c5d8'
+  inverse-surface: '#e1e2ec'
+  inverse-on-surface: '#2d3038'
+  outline: '#8d90a2'
+  outline-variant: '#434656'
+  surface-tint: '#b5c4ff'
+  primary: '#b5c4ff'
+  on-primary: '#00297b'
+  primary-container: '#1d63ff'
+  on-primary-container: '#f6f5ff'
+  inverse-primary: '#0051e1'
+  secondary: '#71ffe5'
+  on-secondary: '#00372f'
+  secondary-container: '#00e5c9'
+  on-secondary-container: '#006255'
+  tertiary: '#f1be63'
+  on-tertiary: '#422c00'
+  tertiary-container: '#926a15'
+  on-tertiary-container: '#fff5eb'
+  error: '#ffb4ab'
+  on-error: '#690005'
+  error-container: '#93000a'
+  on-error-container: '#ffdad6'
+  primary-fixed: '#dce1ff'
+  primary-fixed-dim: '#b5c4ff'
+  on-primary-fixed: '#00164d'
+  on-primary-fixed-variant: '#003cac'
+  secondary-fixed: '#41fcdf'
+  secondary-fixed-dim: '#00dfc4'
+  on-secondary-fixed: '#00201b'
+  on-secondary-fixed-variant: '#005046'
+  tertiary-fixed: '#ffdea9'
+  tertiary-fixed-dim: '#f1be63'
+  on-tertiary-fixed: '#271900'
+  on-tertiary-fixed-variant: '#5f4100'
+  background: '#10131a'
+  on-background: '#e1e2ec'
+  surface-variant: '#32353d'
+typography:
+  headline-xl:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 32px
+    fontWeight: '700'
+    lineHeight: 40px
+    letterSpacing: -0.02em
+  headline-lg:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 24px
+    fontWeight: '600'
+    lineHeight: 32px
+    letterSpacing: -0.015em
+  headline-md:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 18px
+    fontWeight: '600'
+    lineHeight: 24px
+    letterSpacing: -0.01em
+  body-lg:
+    fontFamily: Inter
+    fontSize: 15px
+    fontWeight: '400'
+    lineHeight: 22px
+    letterSpacing: 0em
+  body-md:
+    fontFamily: Inter
+    fontSize: 13px
+    fontWeight: '400'
+    lineHeight: 18px
+    letterSpacing: 0em
+  body-sm:
+    fontFamily: Inter
+    fontSize: 11px
+    fontWeight: '400'
+    lineHeight: 16px
+    letterSpacing: 0.01em
+  label-lg:
+    fontFamily: JetBrains Mono
+    fontSize: 13px
+    fontWeight: '500'
+    lineHeight: 16px
+    letterSpacing: 0.02em
+  label-md:
+    fontFamily: JetBrains Mono
+    fontSize: 11px
+    fontWeight: '500'
+    lineHeight: 14px
+    letterSpacing: 0.04em
+  label-sm:
+    fontFamily: JetBrains Mono
+    fontSize: 9px
+    fontWeight: '600'
+    lineHeight: 12px
+    letterSpacing: 0.06em
+rounded:
+  sm: 0.125rem
+  DEFAULT: 0.25rem
+  md: 0.375rem
+  lg: 0.5rem
+  xl: 0.75rem
+  full: 9999px
+spacing:
+  gutter: 0.75rem
+  gutter-loose: 1rem
+  margin: 1rem
+  space-xs: 0.25rem
+  space-sm: 0.5rem
+  space-md: 0.75rem
+  space-lg: 1.25rem
+  space-xl: 2rem
+---
+
+## Brand & Style
+
+This design system drives a mission-critical desktop suite for high-volume agricultural enterprise distribution. It bridges industrial operational precision with an ultra-premium executive suite aesthetic. The visual tone evokes an authoritative, luxury command center: dark, controlled, hyper-tactile, and intensely focused on high-throughput data processing.
+
+The aesthetic fuses **Tactile Skeuomorphism** with modern **Dark Glassmorphism** and high-density enterprise architecture:
+- Deep obsidian and midnight slate substrates eliminate eye strain during multi-monitor daylight and nocturnal operations.
+- Micro-surfaces leverage specular light paths, inner bevels, and polished metallic rim highlights, treating interface elements as precision-engineered physical switches and glass gauges.
+- Data density is celebrated through crisp tabular scaffolding, modular dockable panels, and distinct visual tiering that highlights yields, batch logistics, currency movements, and critical inventory states.
+
+## Colors
+
+The palette operates on calibrated contrast ratios over deep, light-absorbent foundations. Surfaces do not rely on flat greys; they are composed of deep obsidian and blue-slate undertones to preserve visual richness.
+
+### Functional Palette
+- **Primary (Electric Cobalt - `#1d63ff`):** Interactive focal points, active state indicators, primary execution levers, and selected navigation nodes.
+- **Secondary (Cyber Teal - `#00e5c9`):** Fluid logistics, flow telemetry, batch transit vectors, and secondary operational triggers.
+- **Tertiary (Warm Executive Amber-Gold - `#d4a44c`):** Prestige metrics, valuation summaries, high-tier grading tiers, and executive gross margins.
+- **Neutral (Obsidian Deep Base - `#0a0d14`):** Canvas grounding. Paired with Slate Blue Surface (`#121824`) and Surface Container (`#182234`).
+- **Semantic Accents:**
+  - **Luminous Emerald (`#00f076`):** Positive net cash flow, profit margins, cleared QA batches, and healthy yield thresholds.
+  - **Vivid Crimson (`#ff334b`):** Temperature variance alerts, QA rejections, logistical bottlenecks, and mortality deltas.
+
+All translucent panel fills utilize 60%–85% alpha variants of the slate foundation overlaid with subtle linear specular gradients.
+
+## Typography
+
+The typographic hierarchy accommodates high-density executive information architecture with zero visual ambiguity:
+
+- **Executive Headers (`Plus Jakarta Sans`):** Clean, geometric, contemporary letterforms for system view titles, KPI headers, and dialog headers.
+- **System Body & Operational Text (`Inter`):** Neutral, hyper-legible grotesk optimized for UI labels, dense sub-tables, tooltips, and data feeds.
+- **Telemetry & Quantities (`JetBrains Mono`):** Applied to all quantitative values including currency, weight (kg/tons), egg grades (XL/L/M/S), timestamps, batch IDs, and audit records. Provides tabular alignment to guarantee columns align perfectly down to the single decimal place across rapid real-time updates.
+
+## Layout & Spacing
+
+Engineered specifically as a native Windows desktop runtime application (1080p minimum base resolution, targeting 1440p and 4K executive displays).
+
+- **Layout Structure:** Multi-pane fluid desktop layout with collapsible primary navigation rail (56px collapsed / 240px expanded), contextual telemetry sidebar, and variable dockable card containers.
+- **Rhythm & Grid:** Built on a tight 4px baseline sub-grid with an 8px architectural layout rhythm. Gutters default to `0.75rem` (12px) to maximize screen real estate for deep operational tables while preventing visual clutter.
+- **Window Constraints:**
+  - Standard desktop margin: `1rem` (16px) around the perimeter window frame.
+  - Multi-window split panes enforce an active resize snap zone of 4px.
+  - Form fields and cell contents use compact vertical padding (`space-xs` to `space-sm`) to preserve dense vertical scan paths.
+
+## Elevation & Depth
+
+Visual hierarchy does not rely on simple flat drop shadows; it uses a multi-layered physical lighting system:
+
+- **Surface Tiers & Frosted Glass:**
+  - *Canvas (Level 0):* Deep Obsidian `#0a0d14`.
+  - *Base Panels (Level 1):* Translucent Slate `#121824` at 85% opacity with 16px background blur.
+  - *Floating Modules (Level 2):* Elevated Frosted Slate `#182234` at 70% opacity with 24px background blur.
+- **Precision Micro-Borders:**
+  - Glass panels feature a 1px composite border: top edge has a 20% white gradient accent (simulating overhead directional ceiling light hitting the glass rim), while bottom edges fade into a 40% darker obsidian stroke.
+- **Tactile Shadows:**
+  - Ambient elevation uses dual-layer shadows: a tight, high-opacity directional occlusion shadow (`0 2px 4px rgba(0, 0, 0, 0.5)`) combined with a wide, soft-tinted ambient glow (`0 12px 28px rgba(4, 9, 20, 0.6)`).
+- **Executive Metric Underglow:**
+  - High-priority metric containers cast a faint, diffused ambient colored back-glow matching their semantic status (Cobalt, Emerald, or Gold) at 6% to 12% opacity.
+
+## Shapes
+
+The interface embraces a precise, industrial **Soft (`1`)** shape language:
+- Standard control elements, inputs, and list rows use crisp `0.25rem` (4px) corner radii, maintaining clean line alignment across compact desktop grid arrays.
+- Large floating viewport cards, KPI clusters, and master data modals adopt `rounded-lg` (8px) to soften panel boundaries without wasting perimeter canvas space.
+- Inner elements nested inside cards mirror concentric curves: 8px outer card radius encapsulates 4px inner components.
+- Status badges and tag pills utilize subtle semi-rectilinear geometry rather than full circular capsules to align with the enterprise instrument feel.
+
+## Components
+
+### Hyper-Tactile 3D Action Levers & Buttons
+- **Primary Buttons:** Built with an active specular gradient (Cobalt light source from top-center), a 1px polished metallic inner rim border (`rgba(255, 255, 255, 0.25)` top, `rgba(0, 0, 0, 0.4)` bottom), and a distinct physical extrusion effect (1.5px solid darker base under the button).
+- **Hover State:** Glow intensity increases; upper specular highlight brightens by 15%.
+- **Active / Pressed State:** Button translates 1.5px downwards along the Y-axis; bottom extrusion flattens to 0px; inner shadow intensifies (`inset 0 2px 4px rgba(0, 0, 0, 0.6)`).
+
+### Input Fields & Filter Triggers
+- Base state features a recessed bed effect: `background: #0d121c`, inset micro-shadow `inset 0 1px 3px rgba(0, 0, 0, 0.8)`, and a subtle 1px border (`#222d42`).
+- Focus state casts an electric cobalt rim glow (`box-shadow: 0 0 0 1px #1d63ff, 0 0 8px rgba(29, 99, 255, 0.35)`).
+- Integrated units (e.g., `kg`, `crates`, `$ MXN`) render in `JetBrains Mono` at 50% opacity pinned to the field’s trailing edge.
+
+### Data Grids & Batch Manifest Lists
+- Alternating row zebra-striping via ultra-subtle alpha shifts (`rgba(255, 255, 255, 0.015)`).
+- Row hover triggers an instantaneous 1px Cobalt indicator line along the left edge with a 4% glass highlight across the row.
+- Numbers, dates, and units are strictly right-aligned with fixed tabular spacing.
+
+### Micro Status Chips & Badges
+- Non-intrusive indicators with frosted backgrounds matching semantic tokens at 12% fill opacity, bounded by a 1px stroke of the same hue at 35% opacity.
+- Include a 4px luminous pulsing radial dot for live real-time conditions (e.g., "SORTING LINE 03: ACTIVE").
+
+### Telemetry Gauges & Executive KPI Panels
+- Encased within frosted glass cards with metallic upper rims.
+- Include a monospaced delta badge (+/- percentage) with automatic conditional coloring: Emerald (`#00f076`) for net positive agricultural margins, Crimson (`#ff334b`) for inventory spoil/breakage risks, and Gold (`#d4a44c`) for top-tier grade distribution.

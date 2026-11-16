@@ -1,0 +1,488 @@
+/**
+ * HuevoControl — Directo de Granja
+ * Reglas de negocio puras, tipos de las 16 tablas del modelo de datos y aritmética entera exacta.
+ * Pesos siempre en gramos enteros (INTEGER). Dinero siempre en centavos enteros (BIGINT).
+ * Nunca se usa aritmética de punto flotante para dinero ni pesos.
+ */
+
+export type UserRole = 'dueno' | 'vendedor';
+export type UserStatus = 'pendiente' | 'activa' | 'bloqueada';
+export type PriceOrigin = 'dueno' | 'vendedor';
+export type DeliveryStatus = 'vigente' | 'cancelada';
+export type PaymentMethod = 'efectivo' | 'transferencia';
+export type PaymentStatus = 'verificado' | 'por_verificar';
+export type IncidentType = 'perdida' | 'robo' | 'faltante' | 'otro';
+export type IncidentStatus = 'reportado' | 'revisado';
+export type DeliveryEventType =
+  | 'creacion'
+  | 'pago'
+  | 'abono'
+  | 'cancelacion'
+  | 'remision'
+  | 'sincronizacion';
+
+export interface UserAccount {
+  id: string;
+  googleEmail: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  folioSeries: string | null;
+  createdAtUtc: string;
+  passwordHash?: string;
+}
+
+export interface AuthorizedDevice {
+  id: string;
+  userId: string;
+  deviceName: string;
+  active: boolean;
+  lastSyncUtc: string | null;
+  pendingSyncCount: number;
+}
+
+export interface CrewMember {
+  id: string;
+  userId: string;
+  name: string;
+  roleTitle: 'chofer' | 'chalan' | 'encargado';
+  active: boolean;
+}
+
+export interface Workday {
+  id: string;
+  userId: string;
+  dateYmd: string; // YYYY-MM-DD in America/Mexico_City
+  driverName: string;
+  helpersNames: string[];
+}
+
+export interface Customer {
+  id: string;
+  businessName: string;
+  contactName: string;
+  phone: string;
+  address: string;
+  notes: string;
+  active: boolean;
+  createdByUserId: string;
+  mergedIntoCustomerId: string | null;
+  createdAtUtc: string;
+}
+
+export interface DailyPrice {
+  id: string;
+  dateYmd: string;
+  priceCentavosPerKg: number;
+  publishedByUserId: string;
+  publishedByName: string;
+  origin: PriceOrigin;
+  reviewedByOwner: boolean;
+  createdAtUtc: string;
+}
+
+export interface DeliveryBox {
+  id: string;
+  deliveryId: string;
+  position: number;
+  weightGrams: number;
+}
+
+export interface Delivery {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  workdayId: string;
+  driverName: string;
+  helpersNames: string[];
+  series: string;
+  folioNumber: number;
+  folioFormatted: string;
+  customerId: string;
+  customerName: string;
+  createdAtUtc: string;
+  priceCentavosPerKg: number;
+  isSpecialPrice: boolean;
+  totalGrams: number;
+  calculatedTotalExactMilliCentavos: number;
+  totalToChargeCentavos: number;
+  status: DeliveryStatus;
+  cancellationReason: string | null;
+  syncedAtUtc: string | null;
+}
+
+export interface DailyLoss {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  workdayId: string;
+  dateYmd: string;
+  lostGrams: number;
+  note: string;
+  createdAtUtc: string;
+}
+
+export interface Payment {
+  id: string;
+  customerId: string;
+  deliveryId: string | null;
+  vendorId: string;
+  amountCentavos: number;
+  method: PaymentMethod;
+  status: PaymentStatus;
+  createdAtUtc: string;
+  note: string;
+}
+
+export interface MoneyIncident {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  type: IncidentType;
+  amountCentavos: number;
+  occurredAtUtc: string;
+  relatedDeliveryId: string | null;
+  relatedCustomerId: string | null;
+  description: string;
+  peoplePresent: string[];
+  status: IncidentStatus;
+  ownerNote: string | null;
+}
+
+export interface DeliveryEvent {
+  id: string;
+  deliveryId: string;
+  eventType: DeliveryEventType;
+  detail: string;
+  actorUserId: string;
+  actorName: string;
+  deviceId: string;
+  occurredAtUtc: string;
+  arrivedAtServerUtc: string | null;
+}
+
+export interface CashClosing {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  dateYmd: string;
+  soldCentavos: number;
+  cashCollectedCentavos: number;
+  transferVerifiedCentavos: number;
+  transferPendingCentavos: number;
+  dailyLossGrams: number;
+  incidentsCentavos: number;
+  expectedCashToDeliverCentavos: number;
+  actualCashHandedInCentavos: number;
+  unexplainedDifferenceCentavos: number;
+  closedAtUtc: string;
+  closedByUserId: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  detail: string;
+  actorUserId: string;
+  actorName: string;
+  occurredAtUtc: string;
+}
+
+export interface ExcelImportRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  fileName: string;
+  importType: 'clientes' | 'precios';
+  importedAtUtc: string;
+  rowsRead: number;
+  rowsCreated: number;
+  rowsRejected: number;
+}
+
+export interface AppSettings {
+  businessName: string;
+  slogan: string;
+  businessPhone: string;
+  businessAddress: string;
+  reduceAnimations: boolean;
+  themeMode: 'dark' | 'light';
+  nextFolioBySeries: Record<string, number>;
+}
+
+export interface ProactiveAlert {
+  id: string;
+  severity: 'info' | 'critical'; // Sin ámbar ni amarillo: info=azul, critical=rojo
+  category: 'sync' | 'transferencia' | 'incidente' | 'peso' | 'precio' | 'cierre' | 'sistema';
+  title: string;
+  message: string;
+  createdAtUtc: string;
+  acknowledged: boolean;
+}
+
+export interface RoundingResult {
+  totalGrams: number;
+  calculatedExactLabel: string;
+  calculatedExactMilliCentavos: number;
+  totalToChargeCentavos: number;
+}
+
+/**
+ * Regla de redondeo exacta de Directo de Granja (Casos C1-C6, R1-R5):
+ * - Pesos en gramos enteros, nunca se redondean.
+ * - Solo se redondea el total a cobrar una sola vez:
+ *   - Centavos de 1 a 49 (estrictamente menor a 50.000): baja al entero anterior.
+ *   - Exactamente 50 centavos (50.000): se queda en .50.
+ *   - Centavos de 51 a 99 (o cualquier fraccion > 50.000 como 62.5): sube al entero siguiente.
+ */
+export function calculateDeliveryTotals(
+  boxesGrams: number[],
+  priceCentavosPerKg: number
+): RoundingResult {
+  if (boxesGrams.length === 0) {
+    throw new Error('La entrega debe tener al menos una caja.');
+  }
+  for (const g of boxesGrams) {
+    if (!Number.isInteger(g) || g <= 0) {
+      throw new Error('Cada caja debe tener un peso entero en gramos mayor que 0.');
+    }
+  }
+  if (!Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0) {
+    throw new Error('El precio por kilo en centavos debe ser mayor que 0.');
+  }
+
+  const totalGrams = boxesGrams.reduce((acc, g) => acc + g, 0);
+  const rawScaled = BigInt(totalGrams) * BigInt(priceCentavosPerKg); // units: 1/1000 of a centavo (100_000 = $1 MXN)
+  const pesos = rawScaled / 100000n;
+  const rem = rawScaled % 100000n;
+
+  let totalToChargeCentavos: number;
+  if (rem < 50000n) {
+    totalToChargeCentavos = Number(pesos * 100n);
+  } else if (rem === 50000n) {
+    totalToChargeCentavos = Number(pesos * 100n + 50n);
+  } else {
+    totalToChargeCentavos = Number((pesos + 1n) * 100n);
+  }
+
+  // Human-readable exact value (supports .125 / .625 without floats)
+  const wholeCentavos = rawScaled / 1000n;
+  const milliRem = rawScaled % 1000n;
+  const exactPesos = wholeCentavos / 100n;
+  const exactCents = Number(wholeCentavos % 100n)
+    .toString()
+    .padStart(2, '0');
+  const calculatedExactLabel =
+    milliRem === 0n
+      ? `$${exactPesos.toLocaleString('es-MX')}.${exactCents}`
+      : `$${exactPesos.toLocaleString('es-MX')}.${exactCents}${Number(milliRem / 100n)}`;
+
+  return {
+    totalGrams,
+    calculatedExactLabel,
+    calculatedExactMilliCentavos: Number(rawScaled),
+    totalToChargeCentavos,
+  };
+}
+
+export function validatePaymentAmount(
+  paymentCentavos: number,
+  remainingCentavos: number
+): void {
+  if (!Number.isInteger(paymentCentavos) || paymentCentavos <= 0) {
+    throw new Error('El monto del pago debe ser mayor a $0.');
+  }
+  if (paymentCentavos > remainingCentavos) {
+    throw new Error(
+      `El pago (${formatCurrencyFromCentavos(paymentCentavos)}) no puede ser mayor al saldo pendiente (${formatCurrencyFromCentavos(remainingCentavos)}).`
+    );
+  }
+}
+
+export function formatKgFromGrams(grams: number): string {
+  const neg = grams < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(grams));
+  const kg = Math.floor(abs / 1000);
+  const rem = Math.floor((abs % 1000) / 10);
+  return `${neg}${kg.toLocaleString('en-US')}.${rem.toString().padStart(2, '0')} kg`;
+}
+
+export function formatCurrencyFromCentavos(centavos: number, forceDecimals = false): string {
+  const neg = centavos < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(centavos));
+  const pesos = Math.floor(abs / 100);
+  const rem = abs % 100;
+  if (rem === 0 && !forceDecimals) {
+    return `${neg}$${pesos.toLocaleString('en-US')}`;
+  }
+  return `${neg}$${pesos.toLocaleString('en-US')}.${rem.toString().padStart(2, '0')}`;
+}
+
+export function formatFolio(series: string, num: number): string {
+  return `${series}-${num.toString().padStart(4, '0')}`;
+}
+
+export function formatMexicoCityDate(utcIso: string): string {
+  const d = new Date(utcIso);
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
+export function formatMexicoCityTime(utcIso: string): string {
+  const d = new Date(utcIso);
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
+export function getMexicoCityYmd(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === 'year')?.value ?? '2026';
+  const m = parts.find((p) => p.type === 'month')?.value ?? '11';
+  const d = parts.find((p) => p.type === 'day')?.value ?? '16';
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Normaliza nombres de negocio para detección de duplicados (sin acentos, minúsculas, espacios colapsados).
+ */
+export function normalizeCustomerName(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+/**
+ * Seguridad Excel (Casos X2 y X3):
+ * Neutraliza inyección de fórmulas (=, +, -, @, tab, CR) al exportar para Excel/CSV.
+ */
+export function escapeExcelFormulaInjection(value: string): string {
+  if (!value) return '';
+  const trimmed = value.replace(/\r/g, ' ');
+  if (/^[=+\-@\t\r]/.test(trimmed)) {
+    return `'${trimmed}`;
+  }
+  return trimmed;
+}
+
+/**
+ * Limpia valores leídos desde archivos Excel/CSV externos (nunca ejecuta fórmulas).
+ */
+export function sanitizeImportedCell(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  const s = String(raw).trim();
+  return s;
+}
+
+export function calculateVendorClosing(params: {
+  deliveries: Delivery[];
+  payments: Payment[];
+  losses: DailyLoss[];
+  incidents: MoneyIncident[];
+  actualCashHandedInCentavos: number;
+}) {
+  const validDeliveries = params.deliveries.filter((d) => d.status === 'vigente');
+  const soldCentavos = validDeliveries.reduce((acc, d) => acc + d.totalToChargeCentavos, 0);
+
+  // Exclude payments tied solely to cancelled deliveries
+  const cancelledIds = new Set(
+    params.deliveries.filter((d) => d.status === 'cancelada').map((d) => d.id)
+  );
+  const activePayments = params.payments.filter(
+    (p) => !p.deliveryId || !cancelledIds.has(p.deliveryId)
+  );
+
+  const cashCollectedCentavos = activePayments
+    .filter((p) => p.method === 'efectivo')
+    .reduce((acc, p) => acc + p.amountCentavos, 0);
+  const transferVerifiedCentavos = activePayments
+    .filter((p) => p.method === 'transferencia' && p.status === 'verificado')
+    .reduce((acc, p) => acc + p.amountCentavos, 0);
+  const transferPendingCentavos = activePayments
+    .filter((p) => p.method === 'transferencia' && p.status === 'por_verificar')
+    .reduce((acc, p) => acc + p.amountCentavos, 0);
+
+  const dailyLossGrams = params.losses.reduce((acc, l) => acc + l.lostGrams, 0);
+  const incidentsCentavos = params.incidents.reduce((acc, i) => acc + i.amountCentavos, 0);
+
+  // Regla I2: Efectivo cobrado menos incidentes registrados da el efectivo a entregar
+  const expectedCashToDeliverCentavos = cashCollectedCentavos - incidentsCentavos;
+  const unexplainedDifferenceCentavos =
+    expectedCashToDeliverCentavos - params.actualCashHandedInCentavos;
+
+  const totalCollectedCentavos =
+    cashCollectedCentavos + transferVerifiedCentavos + transferPendingCentavos;
+  const totalReceivableCentavos = Math.max(0, soldCentavos - totalCollectedCentavos);
+
+  return {
+    soldCentavos,
+    cashCollectedCentavos,
+    transferVerifiedCentavos,
+    transferPendingCentavos,
+    totalCollectedCentavos,
+    totalReceivableCentavos,
+    dailyLossGrams,
+    incidentsCentavos,
+    expectedCashToDeliverCentavos,
+    actualCashHandedInCentavos: params.actualCashHandedInCentavos,
+    unexplainedDifferenceCentavos,
+  };
+}
+
+/**
+ * Calcula saldo real de un cliente desde entregas vigentes y pagos (nunca escrito a mano).
+ */
+export function calculateCustomerLedger(
+  customerId: string,
+  deliveries: Delivery[],
+  payments: Payment[]
+) {
+  const validDeliveries = deliveries.filter(
+    (d) => d.customerId === customerId && d.status === 'vigente'
+  );
+  const cancelledIds = new Set(
+    deliveries
+      .filter((d) => d.customerId === customerId && d.status === 'cancelada')
+      .map((d) => d.id)
+  );
+  const customerPayments = payments.filter(
+    (p) => p.customerId === customerId && (!p.deliveryId || !cancelledIds.has(p.deliveryId))
+  );
+
+  const totalBoughtCentavos = validDeliveries.reduce(
+    (acc, d) => acc + d.totalToChargeCentavos,
+    0
+  );
+  const totalPaidCentavos = customerPayments.reduce((acc, p) => acc + p.amountCentavos, 0);
+  const balanceCentavos = Math.max(0, totalBoughtCentavos - totalPaidCentavos);
+
+  return {
+    totalBoughtCentavos,
+    totalPaidCentavos,
+    balanceCentavos,
+    deliveriesCount: validDeliveries.length,
+    paymentsCount: customerPayments.length,
+  };
+}

@@ -1,0 +1,77 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Paleta Directo de Granja (Azules, Verdes, Blancos, Grises y Rojos. SIN ámbar ni amarillo) -->
+    <SolidColorBrush x:Key="ObsidianBgBrush" Color="#0A0D14"/>
+    <SolidColorBrush x:Key="NavyRailBrush" Color="#0F3D7A"/>
+    <SolidColorBrush x:Key="GlassCardBrush" Color="#141C2B"/>
+    <SolidColorBrush x:Key="CobaltPrimaryBrush" Color="#1D63FF"/>
+    <SolidColorBrush x:Key="EmeraldSuccessBrush" Color="#2E9B5B"/>
+    <SolidColorBrush x:Key="CrimsonDangerBrush" Color="#D64545"/>
+    <SolidColorBrush x:Key="InfoLightBlueBrush" Color="#E6F0FF"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E1E2EC"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#8D90A2"/>
+
+    <!-- Botón 3D Táctil Primario con degradado, borde superior claro, sombra inferior y efecto de hundirse -->
+    <Style x:Key="Tactile3DPrimaryButton" TargetType="Button">
+        <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="ShadowBase" Background="#09256E" CornerRadius="6" Margin="0,3,0,0"/>
+                        <Border x:Name="Face" CornerRadius="6" Margin="0,0,0,3" Padding="{TemplateBinding Padding}"
+                                BorderThickness="1" BorderBrush="#4D94FF">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#2B72FF" Offset="0.0"/>
+                                    <GradientStop Color="#1D63FF" Offset="0.55"/>
+                                    <GradientStop Color="#1348C7" Offset="1.0"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Face" Property="Margin" Value="0,2,0,1"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Tactile3DEmeraldButton" TargetType="Button" BasedOn="{StaticResource Tactile3DPrimaryButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border Background="#124A2A" CornerRadius="6" Margin="0,3,0,0"/>
+                        <Border x:Name="Face" CornerRadius="6" Margin="0,0,0,3" Padding="{TemplateBinding Padding}"
+                                BorderThickness="1" BorderBrush="#5CD68D">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#34B86B" Offset="0.0"/>
+                                    <GradientStop Color="#2E9B5B" Offset="0.55"/>
+                                    <GradientStop Color="#1F7443" Offset="1.0"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Face" Property="Margin" Value="0,2,0,1"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

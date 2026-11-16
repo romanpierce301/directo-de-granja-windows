@@ -1,0 +1,46 @@
+name: HuevoControl CI/CD (.NET 8 Windows .exe & Microservices)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore & Test with >80% Coverage Gate
+        working-directory: dotnet-solution
+        run: |
+          dotnet restore HuevoControl.sln
+          dotnet test tests/HuevoControl.UnitTests/HuevoControl.UnitTests.csproj \
+            --configuration Release \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:Threshold=80 \
+            /p:ThresholdType=line
+
+  build-windows-exe:
+    needs: test-and-coverage
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish Single-File Windows Owner Executable (.exe)
+        working-directory: dotnet-solution
+        run: |
+          dotnet publish src/Desktop/HuevoControl.WindowsApp/HuevoControl.WindowsApp.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o ./artifacts/win-x64
+      - name: Upload HuevoControl-Dueno.exe Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HuevoControl-Dueno-Windows-x64
+          path: dotnet-solution/artifacts/win-x64/*.exe
