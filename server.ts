@@ -125,7 +125,7 @@ async function bootstrap() {
     const db = store.getDb();
     res.json({
       status: 'healthy',
-      service: 'HuevoControl Central Sync & Windows API',
+      service: 'Directo de Granja — Te faltan huevos a nosotros nos sobran',
       timestampUtc: new Date().toISOString(),
       activeWsClients: wsClients.size,
       metrics: {
@@ -1163,7 +1163,7 @@ async function bootstrap() {
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`HuevoControl Windows Desktop & Real-Time Backend running on http://0.0.0.0:${PORT}`);
+    console.log(`Directo de Granja Windows Desktop & Real-Time Backend running on http://0.0.0.0:${PORT}`);
   });
 }
 

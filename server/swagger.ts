@@ -1,12 +1,12 @@
 export const swaggerSpec = {
   openapi: '3.0.3',
   info: {
-    title: 'HuevoControl — Directo de Granja API',
+    title: 'Directo de Granja — API',
     version: '2.0.0',
     description:
       'API del backend central y sincronización en tiempo real entre la Aplicación de Windows del Dueño y las aplicaciones Android de los vendedores. Soporta autenticación JWT basada en roles (Dueño / Vendedor), sincronización idempotente por UUID, caché distribuida, auditoría inmutable e importación/exportación segura de Excel.',
     contact: {
-      name: 'Directo de Granja — Ingeniería HuevoControl',
+      name: 'Directo de Granja — Te faltan huevos a nosotros nos sobran',
     },
   },
   servers: [

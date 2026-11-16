@@ -39,8 +39,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Directo de Granja</h1>
-            <p className="text-xs text-[#71ffe5]">HuevoControl · Aplicación de Windows</p>
-            <p className="mt-1 text-xs text-[#8d90a2]">Acceso exclusivo para el dueño</p>
+            <p className="text-xs text-[#71ffe5]">«Te faltan huevos a nosotros nos sobran»</p>
+            <p className="mt-1 text-xs text-[#8d90a2]">Aplicación de Windows · Acceso exclusivo para el dueño</p>
           </div>
         </div>
 

@@ -57,7 +57,7 @@ export function SplashScreen({ onComplete, reduceAnimations = false }: SplashScr
           «Te faltan huevos a nosotros nos sobran»
         </p>
         <p className="mt-1 text-xs text-[#8d90a2]">
-          HuevoControl · Consola del Dueño para Windows
+          Consola del Dueño para Windows
         </p>
 
         <div className="mt-6">

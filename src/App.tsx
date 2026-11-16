@@ -160,7 +160,7 @@ export default function App() {
           sidebarOpen ? 'w-60' : 'w-16'
         } shrink-0 bg-[#0F3D7A] dark:bg-[#0b0e15] border-r border-[#0a2a54] dark:border-white/10 text-white flex flex-col transition-all duration-150 print:hidden`}
       >
-        <div className="h-14 px-3 flex items-center justify-between border-b border-white/10">
+        <div className="min-h-14 py-2 px-3 flex items-center justify-between border-b border-white/10">
           {sidebarOpen && (
             <div className="flex items-center gap-2.5 min-w-0">
               <img
@@ -169,11 +169,13 @@ export default function App() {
                 className="w-12 h-8 rounded overflow-hidden border border-white/20 object-cover object-center shrink-0"
                 referrerPolicy="no-referrer"
               />
-              <div className="truncate">
+              <div className="min-w-0">
                 <div className="text-xs font-bold tracking-tight truncate">
                   DIRECTO DE GRANJA
                 </div>
-                <div className="text-[10px] text-[#71ffe5] truncate">HuevoControl Windows</div>
+                <div className="text-[10px] text-[#71ffe5] leading-tight">
+                  Te faltan huevos a nosotros nos sobran
+                </div>
               </div>
             </div>
           )}
