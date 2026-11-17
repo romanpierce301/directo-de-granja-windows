@@ -15,10 +15,59 @@ import {
   formatKgFromGrams,
   formatMexicoCityDate,
   formatMexicoCityTime,
+  type Delivery,
+  type DeliveryBox,
+  type Payment,
 } from '../../shared/domain.ts';
 import { apiClient, type DashboardState } from '../services/apiClient.ts';
 import { TactileButton } from '../components/TactileButton.tsx';
 import { Ticket48mm } from '../components/Ticket48mm.tsx';
+
+// Ejemplo visual oficial únicamente para vista previa de plantilla 48mm (no se guarda en base de datos)
+const OFFICIAL_SAMPLE_DELIVERY: Delivery = {
+  id: 'preview-official-ticket',
+  vendorId: 'preview',
+  vendorName: 'Ejemplo oficial',
+  workdayId: 'preview',
+  driverName: 'Chofer',
+  helpersNames: [],
+  series: 'A',
+  folioNumber: 1,
+  folioFormatted: 'A-0001',
+  customerId: 'preview-cust',
+  customerName: 'Abarrotes López',
+  createdAtUtc: '2026-11-15T16:42:00.000Z', // 15/11/2026 10:42 America/Mexico_City
+  priceCentavosPerKg: 3700,
+  isSpecialPrice: false,
+  totalGrams: 120600,
+  calculatedTotalExactMilliCentavos: 446220000,
+  totalToChargeCentavos: 446200,
+  status: 'vigente',
+  cancellationReason: null,
+  syncedAtUtc: null,
+};
+
+const OFFICIAL_SAMPLE_BOXES: DeliveryBox[] = [
+  { id: 'prev-b1', deliveryId: 'preview-official-ticket', position: 1, weightGrams: 25350 },
+  { id: 'prev-b2', deliveryId: 'preview-official-ticket', position: 2, weightGrams: 24450 },
+  { id: 'prev-b3', deliveryId: 'preview-official-ticket', position: 3, weightGrams: 25120 },
+  { id: 'prev-b4', deliveryId: 'preview-official-ticket', position: 4, weightGrams: 22780 },
+  { id: 'prev-b5', deliveryId: 'preview-official-ticket', position: 5, weightGrams: 22900 },
+];
+
+const OFFICIAL_SAMPLE_PAYMENTS: Payment[] = [
+  {
+    id: 'prev-pay-1',
+    customerId: 'preview-cust',
+    deliveryId: 'preview-official-ticket',
+    vendorId: 'preview',
+    amountCentavos: 80000,
+    method: 'efectivo',
+    status: 'verificado',
+    createdAtUtc: '2026-11-15T16:42:00.000Z',
+    note: 'Pago ejemplo plantilla oficial',
+  },
+];
 
 interface EntregasViewProps {
   state: DashboardState;
@@ -31,6 +80,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'vigente' | 'cancelada'>('all');
   const [selectedId, setSelectedId] = useState<string>(state.deliveries[0]?.id ?? '');
+  const [showOfficialSample, setShowOfficialSample] = useState<boolean>(false);
   const [isCopyPreview, setIsCopyPreview] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelBox, setShowCancelBox] = useState(false);
@@ -191,6 +241,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         key={del.id}
                         onClick={() => {
                           setSelectedId(del.id);
+                          setShowOfficialSample(false);
                           setIsCopyPreview(false);
                           setShowCancelBox(false);
                         }}
@@ -254,6 +305,11 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         ? selectedDelivery.helpersNames.join(', ')
                         : 'Ninguno'}
                     </strong>
+                    {selectedDelivery.brandName && (
+                      <>
+                        {' · '}Marca: <strong>{selectedDelivery.brandName}</strong> ({selectedDelivery.boxesCount ?? selectedBoxes.length} cajas)
+                      </>
+                    )}
                   </span>
                 </div>
 
@@ -382,19 +438,33 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
 
         {/* Right Pane: Exact 48mm Thermal Ticket Template Integrated Directly */}
         <div className="xl:col-span-5 glass-panel rounded-lg p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#1d63ff]" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Plantilla oficial de ticket 48mm
               </h3>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
-              Ancho térmico 48mm
-            </span>
+            <div className="flex items-center gap-2">
+              {selectedDelivery && (
+                <TactileButton
+                  variant={showOfficialSample ? 'primary' : 'neutral'}
+                  size="sm"
+                  onClick={() => {
+                    setShowOfficialSample((v) => !v);
+                    setIsCopyPreview(false);
+                  }}
+                >
+                  {showOfficialSample ? 'Ver entrega real' : 'Ver ejemplo oficial'}
+                </TactileButton>
+              )}
+              <span className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                Ancho térmico 48mm
+              </span>
+            </div>
           </div>
 
-          {selectedDelivery && customerLedger ? (
+          {selectedDelivery && customerLedger && !showOfficialSample ? (
             <Ticket48mm
               delivery={selectedDelivery}
               boxes={selectedBoxes}
@@ -406,8 +476,19 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               onReprint={handleReprintCopy}
             />
           ) : (
-            <div className="py-16 text-center text-xs text-slate-500 dark:text-[#8d90a2]">
-              Seleccione una entrega de la tabla para previsualizar e imprimir su ticket de 48mm.
+            <div className="space-y-3">
+              <div className="rounded border border-[#1E5FBF]/40 bg-[#1E5FBF]/10 px-3 py-2 text-[11px] text-[#1E5FBF] dark:text-[#71ffe5] text-center">
+                Ejemplo visual oficial de plantilla 48mm (solo demostración visual; no afecta datos ni inventarios reales).
+              </div>
+              <Ticket48mm
+                delivery={OFFICIAL_SAMPLE_DELIVERY}
+                boxes={OFFICIAL_SAMPLE_BOXES}
+                payments={OFFICIAL_SAMPLE_PAYMENTS}
+                customerTotalBalanceCentavos={366200}
+                settings={state.settings}
+                isCopy={false}
+                onPrint={handlePrint}
+              />
             </div>
           )}
         </div>

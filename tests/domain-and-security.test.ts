@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateBrandInventory,
   calculateCustomerLedger,
   calculateDeliveryTotals,
   calculateVendorClosing,
   escapeExcelFormulaInjection,
   normalizeCustomerName,
+  splitTotalGramsIntoBoxes,
+  validateBodegaSaleStock,
   validatePaymentAmount,
   type DailyLoss,
   type Delivery,
   type MoneyIncident,
   type Payment,
+  type WarehouseShipment,
 } from '../shared/domain.ts';
 import {
   decryptSensitive,
@@ -216,5 +220,118 @@ describe('Seguridad Red Team: Excel Injection (X2/X3), JWT, Cifrado AES-256-GCM 
     expect(sanitizePlainText('<script>alert(1)</script>Abarrotes')).toBe(
       'scriptalert(1)/scriptAbarrotes'
     );
+  });
+});
+
+describe('Bodega: Tortón/Tráiler, Inventario por Marca y Descuento por Venta Directa', () => {
+  it('Agrega tortón y tráiler por marca normalizada, descuenta 40 cajas a Sr. Pablo, rechaza sobreventa y restaura al cancelar', () => {
+    const shipments: WarehouseShipment[] = [
+      {
+        id: 'shp-1',
+        vehicleType: 'torton',
+        referenceCode: 'REM-101',
+        originFarm: 'Granja Norte',
+        driverName: 'Hunter',
+        arrivedAtUtc: '2026-11-16T08:00:00Z',
+        registeredByUserId: 'usr-owner-01',
+        registeredByName: 'Don Juan',
+        notes: '',
+        lines: [
+          {
+            id: 'shl-1',
+            shipmentId: 'shp-1',
+            brandKey: 'enerhuevo',
+            brandName: 'Enerhuevo',
+            boxesCount: 100,
+            totalGrams: 2_450_000,
+          },
+        ],
+      },
+      {
+        id: 'shp-2',
+        vehicleType: 'trailer',
+        referenceCode: 'REM-102',
+        originFarm: 'Granja Sur',
+        driverName: 'Victor',
+        arrivedAtUtc: '2026-11-16T10:00:00Z',
+        registeredByUserId: 'usr-owner-01',
+        registeredByName: 'Don Juan',
+        notes: '',
+        lines: [
+          {
+            id: 'shl-2',
+            shipmentId: 'shp-2',
+            brandKey: 'enerhuevo',
+            brandName: 'ÉnerHuevo',
+            boxesCount: 50,
+            totalGrams: 1_225_000,
+          },
+          {
+            id: 'shl-3',
+            shipmentId: 'shp-2',
+            brandKey: 'san juan',
+            brandName: 'San Juan',
+            boxesCount: 80,
+            totalGrams: 1_920_000,
+          },
+        ],
+      },
+    ];
+
+    const saleBoxes = splitTotalGramsIntoBoxes(980_000, 40);
+    expect(saleBoxes.length).toBe(40);
+    expect(saleBoxes.reduce((a, b) => a + b, 0)).toBe(980_000);
+
+    const calc = calculateDeliveryTotals(saleBoxes, 3700);
+    expect(calc.totalToChargeCentavos).toBe(3626000); // 980 kg * $37 = $36,260
+
+    const deliveries: Delivery[] = [
+      {
+        id: 'del-bd-1',
+        vendorId: 'usr-owner-01',
+        vendorName: 'Don Juan (Bodega)',
+        workdayId: 'wd-bodega-2026-11-16',
+        driverName: 'Entrega en bodega',
+        helpersNames: [],
+        series: 'BD',
+        folioNumber: 1,
+        folioFormatted: 'BD-0001',
+        customerId: 'cust-pablo',
+        customerName: 'Sr. Pablo',
+        createdAtUtc: '2026-11-16T12:00:00Z',
+        priceCentavosPerKg: 3700,
+        isSpecialPrice: false,
+        totalGrams: calc.totalGrams,
+        calculatedTotalExactMilliCentavos: calc.calculatedExactMilliCentavos,
+        totalToChargeCentavos: calc.totalToChargeCentavos,
+        status: 'vigente',
+        cancellationReason: null,
+        syncedAtUtc: '2026-11-16T12:00:00Z',
+        sourceType: 'bodega',
+        brandKey: 'enerhuevo',
+        brandName: 'Enerhuevo',
+        boxesCount: 40,
+      },
+    ];
+
+    const invAfterSale = calculateBrandInventory(shipments, deliveries, []);
+    const ener = invAfterSale.find((b) => b.brandKey === 'enerhuevo')!;
+    expect(ener.boxesArrived).toBe(150);
+    expect(ener.boxesSold).toBe(40);
+    expect(ener.boxesAvailable).toBe(110);
+    expect(ener.gramsAvailable).toBe(2_695_000);
+
+    // Rejects oversell (111 > 110 available)
+    expect(() => validateBodegaSaleStock(invAfterSale, 'enerhuevo', 111)).toThrow(
+      /Inventario insuficiente/
+    );
+
+    // Cancelling the sale restores the 40 boxes back to inventory
+    deliveries[0].status = 'cancelada';
+    const invAfterCancel = calculateBrandInventory(shipments, deliveries, []);
+    const enerRestored = invAfterCancel.find((b) => b.brandKey === 'enerhuevo')!;
+    expect(enerRestored.boxesSold).toBe(0);
+    expect(enerRestored.boxesAvailable).toBe(150);
+    expect(enerRestored.gramsAvailable).toBe(3_675_000);
   });
 });

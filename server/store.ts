@@ -2,9 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import {
+  calculateBrandInventory,
   calculateDeliveryTotals,
   formatCurrencyFromCentavos,
   formatFolio,
+  formatKgFromGrams,
   getMexicoCityYmd,
   normalizeCustomerName,
   normalizePhone,
@@ -24,6 +26,7 @@ import {
   type Payment,
   type ProactiveAlert,
   type UserAccount,
+  type WarehouseShipment,
   type Workday,
 } from '../shared/domain.ts';
 import { hashPassword } from './security.ts';
@@ -44,6 +47,7 @@ export interface LedgerDatabase {
   cashClosings: CashClosing[];
   auditLog: AuditLogEntry[];
   excelImports: ExcelImportRecord[];
+  warehouseShipments: WarehouseShipment[];
   settings: AppSettings;
   acknowledgedAlertIds: string[];
 }
@@ -145,6 +149,7 @@ function createSeedDatabase(): LedgerDatabase {
     cashClosings: [],
     auditLog: [],
     excelImports: [],
+    warehouseShipments: [],
     settings: {
       businessName: 'DIRECTO DE GRANJA',
       slogan: 'Te faltan huevos a nosotros nos sobran',
@@ -152,7 +157,7 @@ function createSeedDatabase(): LedgerDatabase {
       businessAddress: 'Dirección del negocio',
       reduceAnimations: false,
       themeMode: 'dark',
-      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1 },
+      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1, BD: 1 },
     },
     acknowledgedAlertIds: [],
   };
@@ -169,6 +174,9 @@ class LedgerStore {
       try {
         const raw = fs.readFileSync(DATA_FILE, 'utf8');
         this.db = JSON.parse(raw) as LedgerDatabase;
+        this.db.warehouseShipments ??= [];
+        this.db.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1 };
+        this.db.settings.nextFolioBySeries.BD ??= 1;
       } catch {
         this.db = createSeedDatabase();
         this.persist();
@@ -320,6 +328,33 @@ class LedgerStore {
         });
       } else {
         seenNames.set(key, c);
+      }
+    }
+
+    // Detect low or depleted brand inventory in bodega
+    const inventory = calculateBrandInventory(
+      this.db.warehouseShipments,
+      this.db.deliveries,
+      this.db.deliveryBoxes
+    );
+    for (const stock of inventory) {
+      if (stock.boxesArrived > 0 && stock.boxesAvailable <= 10) {
+        const id = `alert-stock-${stock.brandKey}-${stock.boxesAvailable}`;
+        alerts.push({
+          id,
+          severity: stock.boxesAvailable <= 0 ? 'critical' : 'info',
+          category: 'inventario',
+          title:
+            stock.boxesAvailable <= 0
+              ? `Inventario agotado: ${stock.brandName}`
+              : `Inventario bajo: ${stock.brandName} (${stock.boxesAvailable} cajas)`,
+          message:
+            stock.boxesAvailable <= 0
+              ? `Se agotaron las cajas de ${stock.brandName} en bodega. Registre la llegada del próximo tortón o tráiler.`
+              : `Quedan ${stock.boxesAvailable} cajas (${formatKgFromGrams(stock.gramsAvailable)}) de ${stock.brandName} en bodega.`,
+          createdAtUtc: stock.lastArrivalUtc ?? new Date().toISOString(),
+          acknowledged: acked.has(id),
+        });
       }
     }
 

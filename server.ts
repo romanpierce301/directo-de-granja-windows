@@ -8,20 +8,27 @@ import swaggerUi from 'swagger-ui-express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import {
+  calculateBrandInventory,
   calculateCustomerLedger,
   calculateDeliveryTotals,
   calculateVendorClosing,
   formatCurrencyFromCentavos,
   formatFolio,
+  formatKgFromGrams,
   getMexicoCityYmd,
+  normalizeBrandName,
   normalizeCustomerName,
   normalizePhone,
   sanitizeImportedCell,
+  splitTotalGramsIntoBoxes,
+  validateBodegaSaleStock,
   validatePaymentAmount,
   type Customer,
   type Delivery,
   type DeliveryBox,
   type Payment,
+  type WarehouseShipment,
+  type WarehouseShipmentLine,
 } from './shared/domain.ts';
 import {
   hashPassword,
@@ -440,12 +447,15 @@ async function bootstrap() {
       'deliveries',
       delivery.id,
       'CANCELAR_ENTREGA',
-      `Folio ${delivery.folioFormatted} cancelado: ${reason}`,
+      `Folio ${delivery.folioFormatted} cancelado${delivery.brandName ? ` (inventario restaurado: ${delivery.boxesCount ?? 0} cajas de ${delivery.brandName})` : ''}: ${reason}`,
       req.user!.sub,
       req.user!.name
     );
     store.persist();
     broadcastEvent('sync:state_updated', { entity: 'deliveries', deliveryId: delivery.id });
+    if (delivery.brandName) {
+      broadcastEvent('bodega:updated', { deliveryId: delivery.id, restored: true });
+    }
     res.json({ ok: true, delivery });
   });
 
@@ -899,6 +909,325 @@ async function bootstrap() {
     store.acknowledgeAlert(req.params.id);
     broadcastEvent('alert:acknowledged', { alertId: req.params.id });
     res.json({ ok: true });
+  });
+
+  // Bodega: Register Farm -> Warehouse Torton / Trailer Arrival
+  app.post('/api/bodega/shipments', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    const vehicleType = req.body?.vehicleType === 'trailer' ? ('trailer' as const) : ('torton' as const);
+    const referenceCode = sanitizePlainText(req.body?.referenceCode, 80);
+    const originFarm = sanitizePlainText(req.body?.originFarm, 120) || 'Granja origen';
+    const driverName = sanitizePlainText(req.body?.driverName, 80);
+    const notes = sanitizePlainText(req.body?.notes, 240);
+    const rawLines = Array.isArray(req.body?.lines) ? req.body.lines : [];
+
+    if (rawLines.length === 0 || rawLines.length > 50) {
+      res.status(400).json({ error: 'Debe agregar entre 1 y 50 lotes de marca de huevo al viaje.' });
+      return;
+    }
+
+    const shipmentId = `shp-${crypto.randomUUID()}`;
+    const lines: WarehouseShipmentLine[] = [];
+
+    for (const raw of rawLines) {
+      const brandName = sanitizePlainText(raw?.brandName, 80);
+      const brandKey = normalizeBrandName(brandName);
+      const boxesCount = Number(raw?.boxesCount);
+      const totalKg = Number(raw?.totalKg);
+      const totalGrams = Math.round(totalKg * 1000);
+
+      if (
+        !brandName ||
+        !brandKey ||
+        !Number.isInteger(boxesCount) ||
+        boxesCount <= 0 ||
+        boxesCount > 50_000 ||
+        !Number.isFinite(totalKg) ||
+        totalGrams <= 0 ||
+        totalGrams > 50_000_000
+      ) {
+        res.status(400).json({
+          error: 'Cada lote debe indicar marca válida, cajas enteras (> 0) y peso total en kg (> 0).',
+        });
+        return;
+      }
+
+      lines.push({
+        id: `shl-${crypto.randomUUID()}`,
+        shipmentId,
+        brandKey,
+        brandName,
+        boxesCount,
+        totalGrams,
+      });
+    }
+
+    const db = store.getDb();
+    const nowUtc = new Date().toISOString();
+    const shipment: WarehouseShipment = {
+      id: shipmentId,
+      vehicleType,
+      referenceCode: referenceCode || `VIAJE-${db.warehouseShipments.length + 1}`,
+      originFarm,
+      driverName,
+      arrivedAtUtc: nowUtc,
+      registeredByUserId: req.user!.sub,
+      registeredByName: req.user!.name,
+      notes,
+      lines,
+    };
+
+    db.warehouseShipments.unshift(shipment);
+    const summaryText = lines
+      .map((l) => `${l.boxesCount} cajas ${l.brandName} (${formatKgFromGrams(l.totalGrams)})`)
+      .join(', ');
+    store.addAudit(
+      'warehouse_shipments',
+      shipment.id,
+      'REGISTRAR_ENTRADA_BODEGA',
+      `${vehicleType.toUpperCase()} (${shipment.referenceCode}): ${summaryText}`,
+      req.user!.sub,
+      req.user!.name
+    );
+    store.persist();
+    broadcastEvent('bodega:updated', { shipmentId: shipment.id });
+    res.status(201).json({
+      shipment,
+      inventory: calculateBrandInventory(db.warehouseShipments, db.deliveries, db.deliveryBoxes),
+    });
+  });
+
+  // Bodega: Direct Warehouse Egg Sale with Atomic Brand Inventory Deduction
+  app.post('/api/bodega/sales', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    const db = store.getDb();
+    const todayYmd = getMexicoCityYmd();
+    const nowUtc = new Date().toISOString();
+
+    const customerIdInput = sanitizePlainText(req.body?.customerId, 80);
+    const newCustomerName = sanitizePlainText(req.body?.newCustomerName, 120);
+    const newCustomerPhone = normalizePhone(sanitizePlainText(req.body?.newCustomerPhone, 20));
+    const brandInput = sanitizePlainText(req.body?.brandName, 80);
+    const boxesCount = Number(req.body?.boxesCount);
+    const weighMode = req.body?.weighMode === 'cajas' ? ('cajas' as const) : ('total' as const);
+    const isSpecialPrice = Boolean(req.body?.isSpecialPrice);
+
+    if (!brandInput) {
+      res.status(400).json({ error: 'Seleccione la marca de huevo a vender.' });
+      return;
+    }
+
+    // 1. Validate customer (existing or quick walk-in creation)
+    let customer = customerIdInput
+      ? db.customers.find((c) => c.id === customerIdInput && !c.mergedIntoCustomerId)
+      : undefined;
+
+    if (!customer && newCustomerName) {
+      const normalizedNew = normalizeCustomerName(newCustomerName);
+      customer = db.customers.find(
+        (c) => !c.mergedIntoCustomerId && normalizeCustomerName(c.businessName) === normalizedNew
+      );
+      if (!customer) {
+        customer = {
+          id: `cust-${crypto.randomUUID()}`,
+          businessName: newCustomerName,
+          contactName: 'Cliente de bodega',
+          phone: newCustomerPhone,
+          address: 'Compra directa en bodega',
+          notes: '',
+          active: true,
+          createdByUserId: req.user!.sub,
+          mergedIntoCustomerId: null,
+          createdAtUtc: nowUtc,
+        };
+        db.customers.push(customer);
+      }
+    }
+
+    if (!customer) {
+      res.status(400).json({ error: 'Seleccione un cliente o ingrese el nombre del comprador.' });
+      return;
+    }
+
+    if (!Number.isInteger(boxesCount) || boxesCount <= 0 || boxesCount > 5000) {
+      res.status(400).json({ error: 'La cantidad de cajas por venta debe estar entre 1 y 5,000.' });
+      return;
+    }
+
+    // 2. Validate available inventory for requested brand BEFORE mutating anything
+    const inventory = calculateBrandInventory(db.warehouseShipments, db.deliveries, db.deliveryBoxes);
+    let matchedStock;
+    try {
+      matchedStock = validateBodegaSaleStock(inventory, brandInput, boxesCount);
+    } catch (err) {
+      res.status(409).json({ error: (err as Error).message });
+      return;
+    }
+
+    // 3. Build integer grams per box
+    let boxesGrams: number[] = [];
+    if (weighMode === 'cajas') {
+      const rawBoxes = Array.isArray(req.body?.boxesGrams) ? req.body.boxesGrams : [];
+      if (rawBoxes.length !== boxesCount || rawBoxes.length > 500) {
+        res.status(400).json({
+          error: `Debe capturar exactamente ${boxesCount} peso(s) individuales de caja.`,
+        });
+        return;
+      }
+      boxesGrams = rawBoxes.map((g: unknown) => Math.round(Number(g)));
+      if (boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)) {
+        res.status(400).json({ error: 'Cada caja debe tener un peso válido mayor a 0.' });
+        return;
+      }
+    } else {
+      const totalKg = Number(req.body?.totalKg);
+      const totalGrams = Math.round(totalKg * 1000);
+      if (!Number.isFinite(totalKg) || totalGrams <= 0 || totalGrams > 50_000_000) {
+        res.status(400).json({ error: 'Ingrese el peso total en báscula (kg) mayor a 0.' });
+        return;
+      }
+      try {
+        boxesGrams = splitTotalGramsIntoBoxes(totalGrams, boxesCount);
+      } catch (err) {
+        res.status(400).json({ error: (err as Error).message });
+        return;
+      }
+    }
+
+    // 4. Resolve price per kg
+    const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
+    const requestedPricePesos = Number(req.body?.pricePesosPerKg);
+    let priceCentavosPerKg: number;
+    if (isSpecialPrice || !latestPrice) {
+      priceCentavosPerKg = Math.round(requestedPricePesos * 100);
+    } else {
+      priceCentavosPerKg = Number.isFinite(requestedPricePesos) && requestedPricePesos > 0
+        ? Math.round(requestedPricePesos * 100)
+        : latestPrice.priceCentavosPerKg;
+    }
+
+    if (!Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0 || priceCentavosPerKg > 50_000) {
+      res.status(400).json({ error: 'El precio por kilo debe ser mayor a $0 (publique el precio del día o capture uno válido).' });
+      return;
+    }
+
+    let calc;
+    try {
+      calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
+
+    // 5. Optional initial payment validation
+    const rawPaid = req.body?.paidPesos;
+    const paidPesos =
+      rawPaid === '' || rawPaid === null || rawPaid === undefined ? 0 : Number(rawPaid);
+    if (!Number.isFinite(paidPesos) || paidPesos < 0) {
+      res.status(400).json({ error: 'El pago inicial no puede ser negativo.' });
+      return;
+    }
+    const paidCentavos = Math.round(paidPesos * 100);
+    if (paidCentavos > 0) {
+      try {
+        validatePaymentAmount(paidCentavos, calc.totalToChargeCentavos);
+      } catch (err) {
+        res.status(400).json({ error: (err as Error).message });
+        return;
+      }
+    }
+
+    // 6. Commit Bodega Sale & Inventory Deduction atomically
+    const folioInfo = store.reserveNextFolio('BD');
+    const deliveryId = `del-bd-${crypto.randomUUID()}`;
+    const delivery: Delivery = {
+      id: deliveryId,
+      vendorId: req.user!.sub,
+      vendorName: `${req.user!.name} (Bodega)`,
+      workdayId: `wd-bodega-${todayYmd}`,
+      driverName: 'Entrega en bodega',
+      helpersNames: [],
+      series: 'BD',
+      folioNumber: folioInfo.folioNumber,
+      folioFormatted: folioInfo.folioFormatted,
+      customerId: customer.id,
+      customerName: customer.businessName,
+      createdAtUtc: nowUtc,
+      priceCentavosPerKg,
+      isSpecialPrice,
+      totalGrams: calc.totalGrams,
+      calculatedTotalExactMilliCentavos: calc.calculatedExactMilliCentavos,
+      totalToChargeCentavos: calc.totalToChargeCentavos,
+      status: 'vigente',
+      cancellationReason: null,
+      syncedAtUtc: nowUtc,
+      sourceType: 'bodega',
+      brandKey: matchedStock.brandKey,
+      brandName: matchedStock.brandName,
+      boxesCount,
+    };
+
+    const createdBoxes: DeliveryBox[] = boxesGrams.map((wg, i) => ({
+      id: `box-${crypto.randomUUID()}`,
+      deliveryId,
+      position: i + 1,
+      weightGrams: wg,
+    }));
+
+    db.deliveries.unshift(delivery);
+    db.deliveryBoxes.push(...createdBoxes);
+
+    let createdPayment: Payment | null = null;
+    if (paidCentavos > 0) {
+      const method = req.body?.paymentMethod === 'transferencia' ? 'transferencia' : 'efectivo';
+      createdPayment = {
+        id: `pay-${crypto.randomUUID()}`,
+        customerId: customer.id,
+        deliveryId,
+        vendorId: req.user!.sub,
+        amountCentavos: paidCentavos,
+        method,
+        status: method === 'efectivo' ? 'verificado' : 'por_verificar',
+        createdAtUtc: nowUtc,
+        note: `Pago en bodega · ${boxesCount} cajas ${matchedStock.brandName}`,
+      };
+      db.payments.push(createdPayment);
+    }
+
+    db.deliveryEvents.push({
+      id: `evt-${crypto.randomUUID()}`,
+      deliveryId,
+      eventType: 'creacion',
+      detail: `Venta directa en bodega ${delivery.folioFormatted}: ${boxesCount} cajas de ${matchedStock.brandName} (${formatKgFromGrams(calc.totalGrams)})`,
+      actorUserId: req.user!.sub,
+      actorName: req.user!.name,
+      deviceId: 'win-owner-desktop',
+      occurredAtUtc: nowUtc,
+      arrivedAtServerUtc: nowUtc,
+    });
+
+    store.addAudit(
+      'deliveries',
+      deliveryId,
+      'VENTA_BODEGA',
+      `${delivery.folioFormatted} · ${customer.businessName}: -${boxesCount} cajas ${matchedStock.brandName} (${formatKgFromGrams(calc.totalGrams)}) = ${formatCurrencyFromCentavos(calc.totalToChargeCentavos)}`,
+      req.user!.sub,
+      req.user!.name
+    );
+
+    store.persist();
+    broadcastEvent('bodega:updated', { deliveryId, brandKey: matchedStock.brandKey });
+    broadcastEvent('delivery:synced', { deliveryId, folio: delivery.folioFormatted });
+
+    const nextInventory = calculateBrandInventory(
+      db.warehouseShipments,
+      db.deliveries,
+      db.deliveryBoxes
+    );
+    res.status(201).json({
+      delivery,
+      boxes: createdBoxes,
+      payment: createdPayment,
+      inventory: nextInventory,
+    });
   });
 
   // Android Real-Time Sync Endpoints (POST /api/sync/push & GET /api/sync/pull)

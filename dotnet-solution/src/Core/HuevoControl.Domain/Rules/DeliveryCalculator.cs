@@ -21,6 +21,16 @@ public sealed record ClosingCalculationResult(
     long ActualCashHandedInCentavos,
     long UnexplainedDifferenceCentavos);
 
+public sealed record BrandInventorySummary(
+    string BrandKey,
+    string BrandName,
+    int BoxesArrived,
+    int BoxesSold,
+    int BoxesAvailable,
+    long GramsArrived,
+    long GramsSold,
+    long GramsAvailable);
+
 public static class DeliveryCalculator
 {
     /// <summary>
@@ -114,6 +124,94 @@ public static class DeliveryCalculator
             expectedCash,
             actualCashHandedInCentavos,
             unexplainedDiff);
+    }
+
+    public static IReadOnlyList<int> SplitTotalGramsIntoBoxes(int totalGrams, int boxesCount)
+    {
+        if (totalGrams <= 0)
+            throw new ArgumentOutOfRangeException(nameof(totalGrams), "El peso total debe ser mayor a 0 gramos.");
+        if (boxesCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(boxesCount), "La cantidad de cajas debe ser mayor a 0.");
+        if (totalGrams < boxesCount)
+            throw new InvalidOperationException("El peso total en gramos debe ser al menos 1 gramo por caja.");
+
+        int baseGrams = totalGrams / boxesCount;
+        int rem = totalGrams % boxesCount;
+        var list = new int[boxesCount];
+        for (int i = 0; i < boxesCount; i++)
+            list[i] = i < rem ? baseGrams + 1 : baseGrams;
+        return list;
+    }
+
+    public static IReadOnlyList<BrandInventorySummary> CalculateBrandInventory(
+        IEnumerable<WarehouseShipment> shipments,
+        IEnumerable<Delivery> deliveries,
+        IEnumerable<DeliveryBox> deliveryBoxes)
+    {
+        var boxCountsByDelivery = deliveryBoxes
+            .GroupBy(b => b.DeliveryId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var map = new Dictionary<string, (string BrandName, int BoxesArrived, int BoxesSold, long GramsArrived, long GramsSold)>();
+
+        foreach (var s in shipments)
+        {
+            foreach (var l in s.Lines)
+            {
+                string key = string.IsNullOrWhiteSpace(l.BrandKey)
+                    ? ExcelSecuritySanitizer.NormalizeName(l.BrandName)
+                    : l.BrandKey;
+                if (string.IsNullOrEmpty(key)) continue;
+                map.TryGetValue(key, out var cur);
+                string name = string.IsNullOrEmpty(cur.BrandName) ? l.BrandName.Trim() : cur.BrandName;
+                map[key] = (name, cur.BoxesArrived + l.BoxesCount, cur.BoxesSold, cur.GramsArrived + l.TotalGrams, cur.GramsSold);
+            }
+        }
+
+        foreach (var d in deliveries)
+        {
+            if (d.Status != DeliveryStatus.Vigente) continue;
+            string key = !string.IsNullOrWhiteSpace(d.BrandKey)
+                ? d.BrandKey!
+                : ExcelSecuritySanitizer.NormalizeName(d.BrandName);
+            if (string.IsNullOrEmpty(key)) continue;
+            int boxes = d.BoxesCount is > 0
+                ? d.BoxesCount.Value
+                : (boxCountsByDelivery.TryGetValue(d.Id, out int cnt) ? cnt : 0);
+
+            map.TryGetValue(key, out var cur);
+            string name = string.IsNullOrEmpty(cur.BrandName) ? (d.BrandName ?? key) : cur.BrandName;
+            map[key] = (name, cur.BoxesArrived, cur.BoxesSold + boxes, cur.GramsArrived, cur.GramsSold + d.TotalGrams);
+        }
+
+        return map
+            .Select(kv => new BrandInventorySummary(
+                kv.Key,
+                kv.Value.BrandName,
+                kv.Value.BoxesArrived,
+                kv.Value.BoxesSold,
+                kv.Value.BoxesArrived - kv.Value.BoxesSold,
+                kv.Value.GramsArrived,
+                kv.Value.GramsSold,
+                Math.Max(0L, kv.Value.GramsArrived - kv.Value.GramsSold)))
+            .OrderBy(x => x.BrandName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public static BrandInventorySummary ValidateBodegaSaleStock(
+        IEnumerable<BrandInventorySummary> inventory,
+        string brandNameOrKey,
+        int boxesRequested)
+    {
+        if (boxesRequested <= 0)
+            throw new ArgumentOutOfRangeException(nameof(boxesRequested), "La cantidad de cajas debe ser mayor a 0.");
+        string key = ExcelSecuritySanitizer.NormalizeName(brandNameOrKey);
+        var stock = inventory.FirstOrDefault(i => i.BrandKey == key);
+        if (stock is null || stock.BoxesArrived <= 0)
+            throw new InvalidOperationException($"No hay inventario registrado en bodega para la marca \"{brandNameOrKey}\".");
+        if (stock.BoxesAvailable < boxesRequested)
+            throw new InvalidOperationException($"Inventario insuficiente de {stock.BrandName}: disponibles {stock.BoxesAvailable} cajas, solicitadas {boxesRequested} cajas.");
+        return stock;
     }
 }
 

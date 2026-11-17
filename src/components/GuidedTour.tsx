@@ -4,6 +4,7 @@ import { TactileButton } from './TactileButton.tsx';
 
 export type NavTab =
   | 'panel'
+  | 'bodega'
   | 'vendedores'
   | 'precio'
   | 'entregas'
@@ -26,6 +27,12 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Panel general en tiempo real',
     description:
       'Vea de un vistazo lo vendido, cobrado, saldo por cobrar y las últimas sincronizaciones de cada vendedor en la calle.',
+  },
+  {
+    tab: 'bodega',
+    title: 'Bodega: Tortón, Tráiler e Inventario',
+    description:
+      'Registre la llegada de huevo por marca, cajas y peso total desde la granja, y realice ventas directas en bodega con descuento automático del inventario.',
   },
   {
     tab: 'vendedores',

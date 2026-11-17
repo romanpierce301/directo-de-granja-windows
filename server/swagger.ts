@@ -215,6 +215,23 @@ export const swaggerSpec = {
         responses: { 200: { description: 'Registros importados y bitácora registrada' } },
       },
     },
+    '/bodega/shipments': {
+      post: {
+        tags: ['Bodega e Inventario'],
+        summary: 'Registrar llegada de tortón o tráiler de granja con marcas, cajas y peso total',
+        responses: { 201: { description: 'Entrada registrada e inventario por marca actualizado' } },
+      },
+    },
+    '/bodega/sales': {
+      post: {
+        tags: ['Bodega e Inventario'],
+        summary: 'Registrar venta directa en bodega descontando cajas y peso del inventario de la marca',
+        responses: {
+          201: { description: 'Venta registrada con folio BD-XXXX e inventario descontado' },
+          409: { description: 'Inventario insuficiente de cajas para la marca solicitada' },
+        },
+      },
+    },
     '/monitoring/alerts/{id}/ack': {
       post: {
         tags: ['Monitoreo'],

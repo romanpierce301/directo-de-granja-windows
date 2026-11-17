@@ -88,6 +88,43 @@ export interface DeliveryBox {
   weightGrams: number;
 }
 
+export type VehicleType = 'torton' | 'trailer';
+
+export interface WarehouseShipmentLine {
+  id: string;
+  shipmentId: string;
+  brandKey: string;
+  brandName: string;
+  boxesCount: number;
+  totalGrams: number;
+}
+
+export interface WarehouseShipment {
+  id: string;
+  vehicleType: VehicleType;
+  referenceCode: string;
+  originFarm: string;
+  driverName: string;
+  arrivedAtUtc: string;
+  registeredByUserId: string;
+  registeredByName: string;
+  notes: string;
+  lines: WarehouseShipmentLine[];
+}
+
+export interface BrandInventorySummary {
+  brandKey: string;
+  brandName: string;
+  boxesArrived: number;
+  boxesSold: number;
+  boxesAvailable: number;
+  gramsArrived: number;
+  gramsSold: number;
+  gramsAvailable: number;
+  avgGramsPerBox: number;
+  lastArrivalUtc: string | null;
+}
+
 export interface Delivery {
   id: string;
   vendorId: string;
@@ -109,6 +146,10 @@ export interface Delivery {
   status: DeliveryStatus;
   cancellationReason: string | null;
   syncedAtUtc: string | null;
+  sourceType?: 'ruta' | 'bodega';
+  brandKey?: string | null;
+  brandName?: string | null;
+  boxesCount?: number | null;
 }
 
 export interface DailyLoss {
@@ -215,7 +256,7 @@ export interface AppSettings {
 export interface ProactiveAlert {
   id: string;
   severity: 'info' | 'critical'; // Sin ámbar ni amarillo: info=azul, critical=rojo
-  category: 'sync' | 'transferencia' | 'incidente' | 'peso' | 'precio' | 'cierre' | 'sistema';
+  category: 'sync' | 'transferencia' | 'incidente' | 'peso' | 'precio' | 'cierre' | 'sistema' | 'inventario';
   title: string;
   message: string;
   createdAtUtc: string;
@@ -485,4 +526,140 @@ export function calculateCustomerLedger(
     deliveriesCount: validDeliveries.length,
     paymentsCount: customerPayments.length,
   };
+}
+
+export function normalizeBrandName(brand: string): string {
+  return brand
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Divide un peso total en gramos enteros entre N cajas exactamente sin pérdida ni redondeo flotante.
+ */
+export function splitTotalGramsIntoBoxes(totalGrams: number, boxesCount: number): number[] {
+  if (!Number.isInteger(totalGrams) || totalGrams <= 0) {
+    throw new Error('El peso total en gramos debe ser un entero mayor que 0.');
+  }
+  if (!Number.isInteger(boxesCount) || boxesCount <= 0) {
+    throw new Error('La cantidad de cajas debe ser un entero mayor que 0.');
+  }
+  if (totalGrams < boxesCount) {
+    throw new Error('El peso total en gramos debe ser al menos 1 gramo por caja.');
+  }
+  const base = Math.floor(totalGrams / boxesCount);
+  const rem = totalGrams % boxesCount;
+  const result: number[] = [];
+  for (let i = 0; i < boxesCount; i++) {
+    result.push(i < rem ? base + 1 : base);
+  }
+  return result;
+}
+
+/**
+ * Calcula el inventario exacto de bodega por marca de huevo:
+ * - Suma todas las cajas y gramos llegados en tortones/tráileres.
+ * - Descuenta únicamente entregas vigentes asociadas a esa marca (si una venta se cancela, el stock regresa).
+ */
+export function calculateBrandInventory(
+  shipments: WarehouseShipment[],
+  deliveries: Delivery[],
+  deliveryBoxes: DeliveryBox[]
+): BrandInventorySummary[] {
+  const map = new Map<string, BrandInventorySummary>();
+
+  for (const s of shipments) {
+    for (const line of s.lines) {
+      const key = line.brandKey || normalizeBrandName(line.brandName);
+      if (!key) continue;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          brandKey: key,
+          brandName: line.brandName.trim(),
+          boxesArrived: line.boxesCount,
+          boxesSold: 0,
+          boxesAvailable: line.boxesCount,
+          gramsArrived: line.totalGrams,
+          gramsSold: 0,
+          gramsAvailable: line.totalGrams,
+          avgGramsPerBox:
+            line.boxesCount > 0 ? Math.round(line.totalGrams / line.boxesCount) : 0,
+          lastArrivalUtc: s.arrivedAtUtc,
+        });
+      } else {
+        existing.boxesArrived += line.boxesCount;
+        existing.gramsArrived += line.totalGrams;
+        if (!existing.lastArrivalUtc || s.arrivedAtUtc > existing.lastArrivalUtc) {
+          existing.lastArrivalUtc = s.arrivedAtUtc;
+        }
+      }
+    }
+  }
+
+  for (const d of deliveries) {
+    if (d.status !== 'vigente') continue;
+    const key = d.brandKey || (d.brandName ? normalizeBrandName(d.brandName) : '');
+    if (!key) continue;
+
+    const delBoxesCount =
+      typeof d.boxesCount === 'number' && d.boxesCount > 0
+        ? d.boxesCount
+        : deliveryBoxes.filter((b) => b.deliveryId === d.id).length;
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        brandKey: key,
+        brandName: d.brandName || key,
+        boxesArrived: 0,
+        boxesSold: delBoxesCount,
+        boxesAvailable: -delBoxesCount,
+        gramsArrived: 0,
+        gramsSold: d.totalGrams,
+        gramsAvailable: 0,
+        avgGramsPerBox: 0,
+        lastArrivalUtc: null,
+      });
+    } else {
+      existing.boxesSold += delBoxesCount;
+      existing.gramsSold += d.totalGrams;
+    }
+  }
+
+  const list: BrandInventorySummary[] = [];
+  for (const item of map.values()) {
+    item.boxesAvailable = item.boxesArrived - item.boxesSold;
+    item.gramsAvailable = Math.max(0, item.gramsArrived - item.gramsSold);
+    item.avgGramsPerBox =
+      item.boxesArrived > 0 ? Math.round(item.gramsArrived / item.boxesArrived) : 0;
+    list.push(item);
+  }
+
+  return list.sort((a, b) => a.brandName.localeCompare(b.brandName, 'es'));
+}
+
+export function validateBodegaSaleStock(
+  inventory: BrandInventorySummary[],
+  brandNameOrKey: string,
+  boxesRequested: number
+): BrandInventorySummary {
+  if (!Number.isInteger(boxesRequested) || boxesRequested <= 0) {
+    throw new Error('La cantidad de cajas a vender debe ser un entero mayor a 0.');
+  }
+  const key = normalizeBrandName(brandNameOrKey);
+  const stock = inventory.find((i) => i.brandKey === key);
+  if (!stock || stock.boxesArrived <= 0) {
+    throw new Error(`No hay inventario registrado en bodega para la marca "${brandNameOrKey}".`);
+  }
+  if (stock.boxesAvailable < boxesRequested) {
+    throw new Error(
+      `Inventario insuficiente de ${stock.brandName}: disponibles ${stock.boxesAvailable} cajas, solicitadas ${boxesRequested} cajas.`
+    );
+  }
+  return stock;
 }

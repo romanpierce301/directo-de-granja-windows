@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  calculateBrandInventory,
   calculateCustomerLedger,
   escapeExcelFormulaInjection,
   formatCurrencyFromCentavos,
@@ -200,7 +201,7 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
   };
 
   const exportSafeWorkbook = (
-    kind: 'ventas' | 'clientes' | 'cierres' | 'mermas' | 'incidentes' | 'respaldo'
+    kind: 'ventas' | 'clientes' | 'cierres' | 'mermas' | 'incidentes' | 'bodega' | 'respaldo'
   ) => {
     const wb = XLSX.utils.book_new();
 
@@ -208,6 +209,9 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
       XLSX.utils.json_to_sheet(
         state.deliveries.map((d) => ({
           Folio: escapeExcelFormulaInjection(d.folioFormatted),
+          Origen: d.sourceType === 'bodega' ? 'Bodega' : 'Ruta',
+          Marca: escapeExcelFormulaInjection(d.brandName ?? ''),
+          Cajas: d.boxesCount ?? '',
           Fecha: formatMexicoCityDate(d.createdAtUtc),
           Hora: formatMexicoCityTime(d.createdAtUtc),
           Vendedor: escapeExcelFormulaInjection(d.vendorName),
@@ -292,6 +296,47 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
           }))
         ),
         'Incidentes'
+      );
+    }
+    if (kind === 'bodega' || kind === 'respaldo') {
+      const inv = calculateBrandInventory(
+        state.warehouseShipments,
+        state.deliveries,
+        state.deliveryBoxes
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          inv.map((b) => ({
+            Marca: escapeExcelFormulaInjection(b.brandName),
+            CajasLlegaron: b.boxesArrived,
+            KilosLlegaron: formatKgFromGrams(b.gramsArrived),
+            CajasVendidas: b.boxesSold,
+            KilosVendidos: formatKgFromGrams(b.gramsSold),
+            CajasDisponibles: b.boxesAvailable,
+            KilosDisponibles: formatKgFromGrams(b.gramsAvailable),
+          }))
+        ),
+        'InventarioBodega'
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          state.warehouseShipments.flatMap((s) =>
+            s.lines.map((l) => ({
+              Fecha: formatMexicoCityDate(s.arrivedAtUtc),
+              Hora: formatMexicoCityTime(s.arrivedAtUtc),
+              Unidad: s.vehicleType === 'trailer' ? 'Tráiler' : 'Tortón',
+              Referencia: escapeExcelFormulaInjection(s.referenceCode),
+              Granja: escapeExcelFormulaInjection(s.originFarm),
+              Chofer: escapeExcelFormulaInjection(s.driverName),
+              Marca: escapeExcelFormulaInjection(l.brandName),
+              Cajas: l.boxesCount,
+              PesoTotal: formatKgFromGrams(l.totalGrams),
+            }))
+          )
+        ),
+        'EntradasGranja'
       );
     }
 
@@ -384,6 +429,13 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
               onClick={() => exportSafeWorkbook('incidentes')}
             >
               Incidentes
+            </TactileButton>
+            <TactileButton
+              variant="neutral"
+              size="sm"
+              onClick={() => exportSafeWorkbook('bodega')}
+            >
+              Bodega e Inventario
             </TactileButton>
             <TactileButton
               variant="primary"

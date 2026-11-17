@@ -28,6 +28,8 @@ public sealed class HuevoControlSqlServerDbContext : DbContext, IHuevoControlDbC
     public DbSet<CashClosing> CashClosings => Set<CashClosing>();
     public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
     public DbSet<ExcelImportRecord> ExcelImports => Set<ExcelImportRecord>();
+    public DbSet<WarehouseShipment> WarehouseShipments => Set<WarehouseShipment>();
+    public DbSet<WarehouseShipmentLine> WarehouseShipmentLines => Set<WarehouseShipmentLine>();
     public DbSet<AppSetting> Settings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -80,6 +82,18 @@ public sealed class HuevoControlSqlServerDbContext : DbContext, IHuevoControlDbC
         modelBuilder.Entity<CashClosing>(e => { e.ToTable("cash_closings"); e.HasKey(x => x.Id); });
         modelBuilder.Entity<AuditLogEntry>(e => { e.ToTable("audit_log"); e.HasKey(x => x.Id); });
         modelBuilder.Entity<ExcelImportRecord>(e => { e.ToTable("excel_imports"); e.HasKey(x => x.Id); });
+        modelBuilder.Entity<WarehouseShipment>(e =>
+        {
+            e.ToTable("warehouse_shipments");
+            e.HasKey(x => x.Id);
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.ShipmentId);
+        });
+        modelBuilder.Entity<WarehouseShipmentLine>(e =>
+        {
+            e.ToTable("warehouse_shipment_lines");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.BrandKey);
+        });
         modelBuilder.Entity<AppSetting>(e => { e.ToTable("settings"); e.HasKey(x => x.Key); });
     }
 }

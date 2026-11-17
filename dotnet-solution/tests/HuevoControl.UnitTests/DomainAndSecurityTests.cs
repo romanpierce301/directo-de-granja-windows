@@ -124,6 +124,56 @@ public sealed class DomainAndSecurityTests
         Assert.Equal(1, second.SkippedDuplicatesCount);
     }
 
+    [Fact]
+    public void Bodega_Torton_And_DirectSale_Deducts_And_Cancel_Restores()
+    {
+        var shipments = new[]
+        {
+            new WarehouseShipment
+            {
+                Id = "shp-1",
+                VehicleType = VehicleType.Torton,
+                Lines =
+                [
+                    new WarehouseShipmentLine
+                    {
+                        Id = "shl-1",
+                        ShipmentId = "shp-1",
+                        BrandKey = "enerhuevo",
+                        BrandName = "Enerhuevo",
+                        BoxesCount = 100,
+                        TotalGrams = 2_450_000
+                    }
+                ]
+            }
+        };
+
+        var deliveries = new List<Delivery>
+        {
+            new()
+            {
+                Id = "del-bd-1",
+                CustomerName = "Sr. Pablo",
+                Status = DeliveryStatus.Vigente,
+                SourceType = "bodega",
+                BrandKey = "enerhuevo",
+                BrandName = "Enerhuevo",
+                BoxesCount = 40,
+                TotalGrams = 980_000
+            }
+        };
+
+        var inv = DeliveryCalculator.CalculateBrandInventory(shipments, deliveries, []);
+        var stock = DeliveryCalculator.ValidateBodegaSaleStock(inv, "Enerhuevo", 60);
+        Assert.Equal(60, stock.BoxesAvailable);
+        Assert.Equal(1_470_000L, stock.GramsAvailable);
+        Assert.Throws<InvalidOperationException>(() => DeliveryCalculator.ValidateBodegaSaleStock(inv, "Enerhuevo", 61));
+
+        deliveries[0].Status = DeliveryStatus.Cancelada;
+        var restored = DeliveryCalculator.CalculateBrandInventory(shipments, deliveries, []);
+        Assert.Equal(100, restored[0].BoxesAvailable);
+    }
+
     private sealed class NoOpPublisher : IRealtimeAlertPublisher
     {
         public Task PublishEventAsync(string eventName, object payload, CancellationToken ct = default)

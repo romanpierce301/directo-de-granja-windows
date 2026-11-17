@@ -8,6 +8,7 @@ public enum PaymentMethod { Efectivo, Transferencia }
 public enum PaymentStatus { Verificado, PorVerificar }
 public enum IncidentType { Perdida, Robo, Faltante, Otro }
 public enum IncidentStatus { Reportado, Revisado }
+public enum VehicleType { Torton, Trailer }
 
 public sealed class UserAccount
 {
@@ -98,7 +99,35 @@ public sealed class Delivery
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Vigente;
     public string? CancellationReason { get; set; }
     public DateTime? SyncedAtUtc { get; set; }
+    public string SourceType { get; set; } = "ruta";
+    public string? BrandKey { get; set; }
+    public string? BrandName { get; set; }
+    public int? BoxesCount { get; set; }
     public List<DeliveryBox> Boxes { get; set; } = new();
+}
+
+public sealed class WarehouseShipment
+{
+    public string Id { get; set; } = string.Empty;
+    public VehicleType VehicleType { get; set; } = VehicleType.Torton;
+    public string ReferenceCode { get; set; } = string.Empty;
+    public string OriginFarm { get; set; } = string.Empty;
+    public string DriverName { get; set; } = string.Empty;
+    public DateTime ArrivedAtUtc { get; set; } = DateTime.UtcNow;
+    public string RegisteredByUserId { get; set; } = string.Empty;
+    public string RegisteredByName { get; set; } = string.Empty;
+    public string Notes { get; set; } = string.Empty;
+    public List<WarehouseShipmentLine> Lines { get; set; } = new();
+}
+
+public sealed class WarehouseShipmentLine
+{
+    public string Id { get; set; } = string.Empty;
+    public string ShipmentId { get; set; } = string.Empty;
+    public string BrandKey { get; set; } = string.Empty;
+    public string BrandName { get; set; } = string.Empty;
+    public int BoxesCount { get; set; }
+    public int TotalGrams { get; set; }
 }
 
 public sealed class DeliveryBox

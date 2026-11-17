@@ -177,6 +177,40 @@ export class ApiClient {
     return this.request(`/api/monitoring/alerts/${alertId}/ack`, { method: 'POST' });
   }
 
+  public async createWarehouseShipment(payload: {
+    vehicleType: 'torton' | 'trailer';
+    referenceCode: string;
+    originFarm: string;
+    driverName: string;
+    notes: string;
+    lines: { brandName: string; boxesCount: number; totalKg: number }[];
+  }) {
+    return this.request('/api/bodega/shipments', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  public async createBodegaSale(payload: {
+    customerId?: string;
+    newCustomerName?: string;
+    newCustomerPhone?: string;
+    brandName: string;
+    boxesCount: number;
+    weighMode: 'total' | 'cajas';
+    totalKg?: number;
+    boxesGrams?: number[];
+    pricePesosPerKg: number;
+    isSpecialPrice: boolean;
+    paidPesos?: number;
+    paymentMethod?: 'efectivo' | 'transferencia';
+  }) {
+    return this.request('/api/bodega/sales', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   public async simulateAndroidSync(payload: {
     simulateFromVendorId: string;
     customerId: string;

@@ -20,6 +20,8 @@ public interface IHuevoControlDbContext
     DbSet<CashClosing> CashClosings { get; }
     DbSet<AuditLogEntry> AuditLogs { get; }
     DbSet<ExcelImportRecord> ExcelImports { get; }
+    DbSet<WarehouseShipment> WarehouseShipments { get; }
+    DbSet<WarehouseShipmentLine> WarehouseShipmentLines { get; }
     DbSet<AppSetting> Settings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

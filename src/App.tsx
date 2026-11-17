@@ -12,6 +12,7 @@ import {
   Settings,
   Users,
   UserCheck,
+  Warehouse,
   Wifi,
   WifiOff,
   X,
@@ -22,6 +23,7 @@ import { SplashScreen } from './components/SplashScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { GuidedTour, type NavTab } from './components/GuidedTour.tsx';
 import { PanelGeneralView } from './views/PanelGeneralView.tsx';
+import { BodegaView } from './views/BodegaView.tsx';
 import { VendedoresView } from './views/VendedoresView.tsx';
 import { PrecioDiaView } from './views/PrecioDiaView.tsx';
 import { EntregasView } from './views/EntregasView.tsx';
@@ -34,6 +36,7 @@ import { SistemaView } from './views/SistemaView.tsx';
 
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'panel', label: 'Panel general', icon: LayoutDashboard },
+  { id: 'bodega', label: 'Bodega y Tortón', icon: Warehouse },
   { id: 'vendedores', label: 'Vendedores', icon: UserCheck },
   { id: 'precio', label: 'Precio del día', icon: DollarSign },
   { id: 'entregas', label: 'Entregas y Ticket', icon: FileText },
@@ -272,6 +275,14 @@ export default function App() {
                 onNavigate={setActiveTab}
                 onRefresh={refreshState}
                 onNotify={notify}
+              />
+            )}
+            {activeTab === 'bodega' && (
+              <BodegaView
+                state={state}
+                onRefresh={refreshState}
+                onNotify={notify}
+                onOpenTicket={() => setActiveTab('entregas')}
               />
             )}
             {activeTab === 'vendedores' && (
