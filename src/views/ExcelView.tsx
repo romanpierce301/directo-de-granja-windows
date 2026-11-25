@@ -356,14 +356,14 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">
           Importar y exportar Excel (.xlsx / .csv)
         </h2>
-        <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+        <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
           Lee solo valores (sin fórmulas ni macros) y escapa caracteres peligrosos (=, +, -, @) al exportar
         </p>
       </div>
 
       {/* Security Privacy Notice */}
-      <div className="glass-panel rounded-lg p-3.5 border border-[#1E5FBF]/40 flex items-center gap-3 text-xs text-slate-700 dark:text-[#dce1ff]">
-        <ShieldAlert className="w-4 h-4 text-[#1E5FBF] dark:text-[#71ffe5] shrink-0" />
+      <div className="glass-panel rounded-lg p-3.5 border border-[#8A2BE2]/40 flex items-center gap-3 text-xs text-slate-700 dark:text-[#F4EFFF]">
+        <ShieldAlert className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC] shrink-0" />
         <span>
           <strong>Protección de datos:</strong> Los archivos exportados contienen nombres, teléfonos y saldos de clientes. Maneje estos archivos con acceso restringido.
         </span>
@@ -374,7 +374,7 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
         <div className="glass-panel rounded-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Upload className="w-4 h-4 text-[#1d63ff]" />
+              <Upload className="w-4 h-4 text-[#8A2BE2]" />
               <span>Importar clientes con vista previa</span>
             </h3>
             <TactileButton
@@ -387,12 +387,12 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
             </TactileButton>
           </div>
 
-          <label className="block cursor-pointer rounded-lg border-2 border-dashed border-slate-300 dark:border-[#2e3a52] hover:border-[#1d63ff] p-6 text-center transition-colors">
-            <FileSpreadsheet className="w-8 h-8 text-[#1d63ff] mx-auto mb-2" />
+          <label className="block cursor-pointer rounded-lg border-2 border-dashed border-slate-300 dark:border-[#341961] hover:border-[#8A2BE2] p-6 text-center transition-colors">
+            <FileSpreadsheet className="w-8 h-8 text-[#8A2BE2] mx-auto mb-2" />
             <div className="text-xs font-semibold text-slate-800 dark:text-white">
               Seleccionar archivo .xlsx o .csv
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-[#8d90a2] mt-1">
+            <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2] mt-1">
               Validación automática: verdes (válidas), azules (duplicados) y rojas (errores)
             </div>
             <input
@@ -407,7 +407,7 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
         {/* Export Card */}
         <div className="glass-panel rounded-lg p-5 space-y-4">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Download className="w-4 h-4 text-[#2E9B5B] dark:text-[#00f076]" />
+            <Download className="w-4 h-4 text-[#10B981] dark:text-[#10B981]" />
             <span>Exportar reportes y respaldo completo</span>
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -455,15 +455,15 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
             <div className="text-xs">
               <strong className="text-slate-900 dark:text-white">{fileName}</strong>
               <span className="mx-2 text-slate-400">·</span>
-              <span className="text-[#2E9B5B] dark:text-[#00f076] font-semibold">
+              <span className="text-[#10B981] dark:text-[#10B981] font-semibold">
                 {validCount} válidas
               </span>
               <span className="mx-2 text-slate-400">·</span>
-              <span className="text-[#1E5FBF] dark:text-[#b5c4ff] font-semibold">
+              <span className="text-[#8A2BE2] dark:text-[#C084FC] font-semibold">
                 {dupCount} duplicados
               </span>
               <span className="mx-2 text-slate-400">·</span>
-              <span className="text-[#D64545] dark:text-[#ff334b] font-semibold">
+              <span className="text-[#F43F5E] dark:text-[#F43F5E] font-semibold">
                 {errCount} errores
               </span>
             </div>
@@ -493,7 +493,7 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
           <div className="overflow-x-auto max-h-80">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#8d90a2]">
+                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#9E8FB2]">
                   <th className="py-2 px-3">Fila</th>
                   <th className="py-2 px-3">Negocio</th>
                   <th className="py-2 px-3">Teléfono</th>
@@ -507,10 +507,10 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
                     key={row.rowIndex}
                     className={
                       row.status === 'valida'
-                        ? 'bg-[#E4F5EB]/60 dark:bg-[#2E9B5B]/12'
+                        ? 'bg-[#D1FAE5]/60 dark:bg-[#10B981]/12'
                         : row.status === 'duplicado'
-                        ? 'bg-[#E6F0FF]/70 dark:bg-[#1d63ff]/12'
-                        : 'bg-[#D64545]/12'
+                        ? 'bg-[#F4EFFF]/70 dark:bg-[#8A2BE2]/12'
+                        : 'bg-[#F43F5E]/12'
                     }
                   >
                     <td className="py-2 px-3 font-mono">{row.rowIndex}</td>
@@ -518,15 +518,15 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
                     <td className="py-2 px-3 font-mono">{row.phone}</td>
                     <td className="py-2 px-3 font-semibold">
                       {row.status === 'valida' ? (
-                        <span className="inline-flex items-center gap-1 text-[#2E9B5B] dark:text-[#00f076]">
+                        <span className="inline-flex items-center gap-1 text-[#10B981] dark:text-[#10B981]">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Válida
                         </span>
                       ) : row.status === 'duplicado' ? (
-                        <span className="inline-flex items-center gap-1 text-[#1E5FBF] dark:text-[#b5c4ff]">
+                        <span className="inline-flex items-center gap-1 text-[#8A2BE2] dark:text-[#C084FC]">
                           <AlertCircle className="w-3.5 h-3.5" /> Duplicado
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[#D64545] dark:text-[#ff334b]">
+                        <span className="inline-flex items-center gap-1 text-[#F43F5E] dark:text-[#F43F5E]">
                           <AlertCircle className="w-3.5 h-3.5" /> Error
                         </span>
                       )}
@@ -557,7 +557,7 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
                     {imp.fileName}
                   </span>
                   <span className="mx-2 text-slate-400">·</span>
-                  <span className="text-slate-500 dark:text-[#8d90a2]">{imp.userName}</span>
+                  <span className="text-slate-500 dark:text-[#9E8FB2]">{imp.userName}</span>
                 </div>
                 <div className="font-mono tabular-nums">
                   Leídas {imp.rowsRead} · Creadas {imp.rowsCreated} · Rechazadas {imp.rowsRejected}

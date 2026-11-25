@@ -156,7 +156,7 @@ export default function App() {
   const unackedAlertsCount = state.alerts.filter((a) => !a.acknowledged).length;
 
   return (
-    <div className="min-h-screen flex bg-[#F2F4F7] dark:bg-[#0a0d14] text-[#1F2933] dark:text-[#e1e2ec]">
+    <div className="min-h-screen flex bg-[#FBF8FF] dark:bg-[#090312] text-[#1F2933] dark:text-[#F4EFFF]">
       {/* Navy / Obsidian Desktop Sidebar Rail */}
       <aside
         className={`${
@@ -176,7 +176,7 @@ export default function App() {
                 <div className="text-xs font-bold tracking-tight truncate">
                   DIRECTO DE GRANJA
                 </div>
-                <div className="text-[10px] text-[#71ffe5] leading-tight">
+                <div className="text-[10px] text-[#C084FC] leading-tight">
                   Te faltan huevos a nosotros nos sobran
                 </div>
               </div>
@@ -201,7 +201,7 @@ export default function App() {
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
                   active
-                    ? 'bg-[#1d63ff] text-white shadow-md'
+                    ? 'bg-[#8A2BE2] text-white shadow-md'
                     : 'text-white/75 hover:text-white hover:bg-white/10'
                 }`}
                 title={item.label}
@@ -233,7 +233,7 @@ export default function App() {
               {NAV_ITEMS.find((i) => i.id === activeTab)?.label}
             </span>
             <span className="text-slate-300 dark:text-white/20">·</span>
-            <span className="text-xs text-slate-500 dark:text-[#8d90a2] truncate">
+            <span className="text-xs text-slate-500 dark:text-[#9E8FB2] truncate">
               {user.name} (Dueño)
             </span>
           </div>
@@ -242,7 +242,7 @@ export default function App() {
             {unackedAlertsCount > 0 && (
               <button
                 onClick={() => setActiveTab('panel')}
-                className="inline-flex items-center gap-1.5 font-semibold text-[#D64545] dark:text-[#ffb4ab] hover:underline"
+                className="inline-flex items-center gap-1.5 font-semibold text-[#F43F5E] dark:text-[#FECDD3] hover:underline"
               >
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>{unackedAlertsCount} alertas</span>
@@ -252,13 +252,13 @@ export default function App() {
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]">
               {wsConnected ? (
                 <>
-                  <Wifi className="w-3.5 h-3.5 text-[#2E9B5B] dark:text-[#00f076]" />
-                  <span className="text-[#2E9B5B] dark:text-[#00f076]">Sync en vivo</span>
+                  <Wifi className="w-3.5 h-3.5 text-[#10B981] dark:text-[#10B981]" />
+                  <span className="text-[#10B981] dark:text-[#10B981]">Sync en vivo</span>
                 </>
               ) : (
                 <>
-                  <WifiOff className="w-3.5 h-3.5 text-[#D64545] dark:text-[#ff334b]" />
-                  <span className="text-[#D64545] dark:text-[#ff334b]">Sin enlace</span>
+                  <WifiOff className="w-3.5 h-3.5 text-[#F43F5E] dark:text-[#F43F5E]" />
+                  <span className="text-[#F43F5E] dark:text-[#F43F5E]">Sin enlace</span>
                 </>
               )}
             </div>
@@ -321,7 +321,7 @@ export default function App() {
 
       {/* Non-intrusive Toast Feedback */}
       {toast && (
-        <div className="fixed bottom-5 left-5 z-50 glass-panel rounded-md px-4 py-2.5 text-xs font-medium flex items-center gap-3 border border-[#1d63ff]/50 shadow-xl print:hidden">
+        <div className="fixed bottom-5 left-5 z-50 glass-panel rounded-md px-4 py-2.5 text-xs font-medium flex items-center gap-3 border border-[#8A2BE2]/50 shadow-xl print:hidden">
           <span>{toast}</span>
           <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">
             <X className="w-3.5 h-3.5" />

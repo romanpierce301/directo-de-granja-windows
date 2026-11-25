@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using HuevoControl.Application.Abstractions;
 using HuevoControl.Domain.Entities;
 using HuevoControl.Infrastructure.Persistence;
@@ -16,6 +17,8 @@ string jwtKey = builder.Configuration["Jwt:SigningKey"]
     ?? throw new InvalidOperationException("Falta Jwt:SigningKey.");
 string aesKey = builder.Configuration["Security:AesKey"]
     ?? throw new InvalidOperationException("Falta Security:AesKey.");
+if (jwtKey.Length < 32 || aesKey.Length < 32)
+    throw new InvalidOperationException("Jwt:SigningKey y Security:AesKey deben tener al menos 32 caracteres aleatorios.");
 
 builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o => o.UseSqlServer(sqlConn));
 builder.Services.AddScoped<IHuevoControlDbContext>(sp => sp.GetRequiredService<HuevoControlSqlServerDbContext>());
@@ -42,6 +45,12 @@ builder.Services.AddAuthorization(opts =>
 {
     opts.AddPolicy("RequireDueno", p => p.RequireRole("dueno"));
 });
+builder.Services.AddRateLimiter(options => options.AddFixedWindowLimiter("LoginRateLimit", limiter =>
+{
+    limiter.Window = TimeSpan.FromMinutes(1);
+    limiter.PermitLimit = 30;
+    limiter.QueueLimit = 0;
+}));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -68,6 +77,7 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -87,7 +97,7 @@ app.MapPost("/api/auth/login", async (
         return Results.Forbid();
 
     return Results.Ok(new { token = jwt.GenerateToken(user), user.Id, user.Name, user.Role, user.FolioSeries });
-});
+}).RequireRateLimiting("LoginRateLimit");
 
 app.MapPost("/api/auth/users", async (
     CreateUserDto req,

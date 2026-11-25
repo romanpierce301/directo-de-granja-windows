@@ -57,7 +57,7 @@ export function SistemaView({
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">
           Ajustes, monitoreo, Swagger API y compilación .EXE (.NET 8)
         </h2>
-        <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+        <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
           Configuración del negocio para ticket 48mm, telemetría del servidor central y solución nativa .NET 8 lista para compilar en Windows
         </p>
       </div>
@@ -66,14 +66,14 @@ export function SistemaView({
         {/* Settings Form */}
         <form onSubmit={handleSaveSettings} className="glass-panel rounded-lg p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-[#1d63ff]" />
+            <Settings className="w-4 h-4 text-[#8A2BE2]" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               Datos del ticket 48mm y accesibilidad
             </h3>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Teléfono mostrado en el ticket 48mm
             </label>
             <input
@@ -84,7 +84,7 @@ export function SistemaView({
           </div>
 
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Dirección mostrada en el ticket 48mm
             </label>
             <input
@@ -96,7 +96,7 @@ export function SistemaView({
 
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+              <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
                 Apariencia (Sin ámbar ni amarillo)
               </label>
               <select
@@ -110,7 +110,7 @@ export function SistemaView({
             </div>
 
             <div className="flex items-end pb-1.5">
-              <label className="inline-flex items-center gap-2 text-xs cursor-pointer text-slate-700 dark:text-[#e1e2ec]">
+              <label className="inline-flex items-center gap-2 text-xs cursor-pointer text-slate-700 dark:text-[#F4EFFF]">
                 <input
                   type="checkbox"
                   checked={reduceAnimations}
@@ -142,7 +142,7 @@ export function SistemaView({
         <div className="glass-panel rounded-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[#2E9B5B] dark:text-[#00f076]" />
+              <Activity className="w-4 h-4 text-[#10B981] dark:text-[#10B981]" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Monitoreo en tiempo real y Swagger OpenAPI
               </h3>
@@ -151,7 +151,7 @@ export function SistemaView({
               href="/api/docs"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-[#1E5FBF] dark:text-[#71ffe5] hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#8A2BE2] dark:text-[#C084FC] hover:underline"
             >
               <span>Abrir Swagger UI</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -160,45 +160,45 @@ export function SistemaView({
 
           {health && (
             <div className="grid grid-cols-2 gap-2.5 text-xs font-mono tabular-nums">
-              <div className="rounded bg-slate-100/80 dark:bg-[#0d121c] p-2.5">
-                <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">Estado</div>
-                <div className="font-bold text-[#2E9B5B] dark:text-[#00f076] uppercase">
+              <div className="rounded bg-slate-100/80 dark:bg-[#130824] p-2.5">
+                <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">Estado</div>
+                <div className="font-bold text-[#10B981] dark:text-[#10B981] uppercase">
                   {health.status}
                 </div>
               </div>
-              <div className="rounded bg-slate-100/80 dark:bg-[#0d121c] p-2.5">
-                <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">
+              <div className="rounded bg-slate-100/80 dark:bg-[#130824] p-2.5">
+                <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">
                   Sesiones WebSocket
                 </div>
                 <div className="font-bold text-slate-900 dark:text-white">
                   {health.activeWsClients} conectadas
                 </div>
               </div>
-              <div className="rounded bg-slate-100/80 dark:bg-[#0d121c] p-2.5">
-                <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">
+              <div className="rounded bg-slate-100/80 dark:bg-[#130824] p-2.5">
+                <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">
                   Entregas sincronizadas
                 </div>
                 <div className="font-bold text-slate-900 dark:text-white">
                   {health.metrics?.deliveriesCount ?? 0}
                 </div>
               </div>
-              <div className="rounded bg-slate-100/80 dark:bg-[#0d121c] p-2.5">
-                <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">
+              <div className="rounded bg-slate-100/80 dark:bg-[#130824] p-2.5">
+                <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">
                   Alertas activas
                 </div>
-                <div className="font-bold text-[#1E5FBF] dark:text-[#b5c4ff]">
+                <div className="font-bold text-[#8A2BE2] dark:text-[#C084FC]">
                   {health.metrics?.pendingAlertsCount ?? 0}
                 </div>
               </div>
             </div>
           )}
 
-          <div className="rounded-md bg-slate-100/80 dark:bg-[#0d121c] p-3 text-xs space-y-1.5">
+          <div className="rounded-md bg-slate-100/80 dark:bg-[#130824] p-3 text-xs space-y-1.5">
             <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <BookOpen className="w-3.5 h-3.5 text-[#1d63ff]" />
+              <BookOpen className="w-3.5 h-3.5 text-[#8A2BE2]" />
               <span>Endpoints de sincronización para la app Android</span>
             </div>
-            <div className="font-mono text-[11px] text-slate-600 dark:text-[#c3c5d8]">
+            <div className="font-mono text-[11px] text-slate-600 dark:text-[#9E8FB2]">
               POST /api/sync/push · GET /api/sync/pull · WS /ws · OpenAPI /api/swagger.json
             </div>
           </div>
@@ -209,22 +209,22 @@ export function SistemaView({
       <div className="glass-panel rounded-lg p-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Monitor className="w-4 h-4 text-[#1d63ff]" />
+            <Monitor className="w-4 h-4 text-[#8A2BE2]" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               Solución nativa .NET 8 (WPF .exe + Microservicios + EF Core SQL Server + Redis)
             </h3>
           </div>
-          <span className="inline-flex items-center gap-1 text-xs font-mono text-[#2E9B5B] dark:text-[#00f076]">
+          <span className="inline-flex items-center gap-1 text-xs font-mono text-[#10B981] dark:text-[#10B981]">
             <ShieldCheck className="w-3.5 h-3.5" /> Lista para compilar en /dotnet-solution
           </span>
         </div>
 
-        <p className="text-xs text-slate-600 dark:text-[#c3c5d8] leading-relaxed">
+        <p className="text-xs text-slate-600 dark:text-[#9E8FB2] leading-relaxed">
           En el directorio <code className="font-mono">/dotnet-solution</code> del repositorio se encuentra la solución modular completa en .NET 8: aplicación de escritorio WPF para Windows con plantilla de ticket 48mm y caché local, microservicios (Gateway YARP, AuthService JWT, SyncService SignalR, LedgerService EF Core SQL Server + Redis, MonitoringService), suite xUnit (&gt;80% cobertura) y pipeline CI/CD en GitHub Actions que genera el ejecutable único <code className="font-mono">.exe</code>.
         </p>
 
-        <div className="rounded-md bg-[#0b0e15] text-[#e1e2ec] p-3.5 font-mono text-[11.5px] overflow-x-auto space-y-1 border border-white/10">
-          <div className="text-[#71ffe5] flex items-center gap-1.5 mb-1">
+        <div className="rounded-md bg-[#0b0e15] text-[#F4EFFF] p-3.5 font-mono text-[11.5px] overflow-x-auto space-y-1 border border-white/10">
+          <div className="text-[#C084FC] flex items-center gap-1.5 mb-1">
             <Terminal className="w-3.5 h-3.5" />
             <span>Comandos para generar el .EXE en Windows (o automático vía GitHub Actions):</span>
           </div>

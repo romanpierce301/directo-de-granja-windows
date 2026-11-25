@@ -83,6 +83,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
   const [showOfficialSample, setShowOfficialSample] = useState<boolean>(false);
   const [isCopyPreview, setIsCopyPreview] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [reviewNote, setReviewNote] = useState('');
   const [showCancelBox, setShowCancelBox] = useState(false);
 
   const vendors = state.users.filter((u) => u.role === 'vendedor');
@@ -159,6 +160,18 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
     }
   };
 
+  const handleReviewDelivery = async (decision: 'aprobar' | 'rechazar') => {
+    if (!selectedDelivery) return;
+    try {
+      await apiClient.reviewDelivery(selectedDelivery.id, decision, reviewNote);
+      setReviewNote('');
+      await onRefresh();
+      onNotify(decision === 'aprobar' ? 'Entrega aprobada; ya forma parte del registro oficial.' : 'Entrega rechazada; se conservó el registro con el motivo.');
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -166,7 +179,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Entregas, bitácora y ticket térmico 48mm
           </h2>
-          <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
             Registros inmutables: una entrega confirmada nunca se borra ni edita en silencio; la cancelación conserva el folio
           </p>
         </div>
@@ -217,7 +230,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#8d90a2]">
+                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#9E8FB2]">
                   <th className="py-2.5 px-3 font-semibold">Folio</th>
                   <th className="py-2.5 px-3 font-semibold">Cliente</th>
                   <th className="py-2.5 px-3 font-semibold">Vendedor</th>
@@ -229,7 +242,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               <tbody className="divide-y divide-slate-200/70 dark:divide-white/5">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500 dark:text-[#8d90a2]">
+                    <td colSpan={6} className="py-8 text-center text-slate-500 dark:text-[#9E8FB2]">
                       No hay entregas que coincidan con los filtros actuales.
                     </td>
                   </tr>
@@ -247,26 +260,26 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         }}
                         className={`cursor-pointer transition-colors ${
                           active
-                            ? 'bg-[#1d63ff]/15 dark:bg-[#1d63ff]/20'
-                            : 'hover:bg-[#1d63ff]/5'
+                            ? 'bg-[#8A2BE2]/15 dark:bg-[#8A2BE2]/20'
+                            : 'hover:bg-[#8A2BE2]/5'
                         }`}
                       >
-                        <td className="py-2.5 px-3 font-mono font-bold text-[#1E5FBF] dark:text-[#b5c4ff]">
+                        <td className="py-2.5 px-3 font-mono font-bold text-[#8A2BE2] dark:text-[#C084FC]">
                           {del.folioFormatted}
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="font-semibold text-slate-900 dark:text-white">
                             {del.customerName}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#9E8FB2]">
                             {formatMexicoCityDate(del.createdAtUtc)}{' '}
                             {formatMexicoCityTime(del.createdAtUtc)}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-[#c3c5d8]">
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-[#9E8FB2]">
                           {del.vendorName}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-800 dark:text-[#e1e2ec]">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-800 dark:text-[#F4EFFF]">
                           {formatKgFromGrams(del.totalGrams)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-white">
@@ -274,14 +287,17 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           {del.status === 'vigente' ? (
-                            <span className="text-[#2E9B5B] dark:text-[#00f076] font-semibold">
+                            <span className="text-[#10B981] dark:text-[#10B981] font-semibold">
                               Vigente
                             </span>
                           ) : (
-                            <span className="text-[#D64545] dark:text-[#ff334b] font-semibold">
+                            <span className="text-[#F43F5E] dark:text-[#F43F5E] font-semibold">
                               Cancelada
                             </span>
                           )}
+                          {del.reviewStatus === 'pendiente' && <span className="ml-2 text-[#F59E0B] font-bold">Por revisar</span>}
+                          {del.reviewStatus === 'aprobada' && <span className="ml-2 text-[#10B981] font-bold">Aprobada</span>}
+                          {del.reviewStatus === 'rechazada' && <span className="ml-2 text-[#F43F5E] font-bold">Rechazada</span>}
                         </td>
                       </tr>
                     );
@@ -295,8 +311,8 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
           {selectedDelivery && (
             <div className="border-t border-slate-200 dark:border-white/10 p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-[#c3c5d8]">
-                  <Users className="w-4 h-4 text-[#1d63ff]" />
+                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-[#9E8FB2]">
+                  <Users className="w-4 h-4 text-[#8A2BE2]" />
                   <span>
                     Equipo: <strong>{selectedDelivery.vendorName}</strong> · Chofer:{' '}
                     <strong>{selectedDelivery.driverName}</strong> · Chalanes:{' '}
@@ -326,8 +342,8 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               </div>
 
               {showCancelBox && (
-                <div className="rounded-md border border-[#D64545]/40 bg-[#D64545]/10 p-3 space-y-2">
-                  <label className="block text-xs font-semibold text-[#D64545] dark:text-[#ffb4ab]">
+                <div className="rounded-md border border-[#F43F5E]/40 bg-[#F43F5E]/10 p-3 space-y-2">
+                  <label className="block text-xs font-semibold text-[#F43F5E] dark:text-[#FECDD3]">
                     Motivo obligatorio de cancelación (se conservará el folio {selectedDelivery.folioFormatted}):
                   </label>
                   <div className="flex gap-2">
@@ -344,8 +360,22 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                 </div>
               )}
 
+              {selectedDelivery.reviewStatus === 'pendiente' && (
+                <div className="rounded-md border border-[#D9A441]/50 bg-[#D9A441]/10 p-3 space-y-2">
+                  <div className="text-xs font-semibold">Movimiento recibido desde Android · pendiente de autorización</div>
+                  <input value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Motivo obligatorio si se rechaza" className="input-recessed w-full rounded px-3 py-1.5 text-xs" />
+                  <div className="flex gap-2">
+                    <TactileButton variant="emerald" size="sm" onClick={() => handleReviewDelivery('aprobar')}>Aprobar registro</TactileButton>
+                    <TactileButton variant="crimson" size="sm" disabled={reviewNote.trim().length < 4} onClick={() => handleReviewDelivery('rechazar')}>Rechazar con motivo</TactileButton>
+                  </div>
+                </div>
+              )}
+              {selectedDelivery.reviewStatus === 'rechazada' && selectedDelivery.reviewNote && (
+                <div className="rounded border border-[#F43F5E]/40 bg-[#F43F5E]/10 px-3 py-2 text-xs"><strong>Revisión:</strong> {selectedDelivery.reviewNote}</div>
+              )}
+
               {selectedDelivery.status === 'cancelada' && selectedDelivery.cancellationReason && (
-                <div className="rounded border border-[#D64545]/40 bg-[#D64545]/10 px-3 py-2 text-xs text-[#D64545] dark:text-[#ffb4ab]">
+                <div className="rounded border border-[#F43F5E]/40 bg-[#F43F5E]/10 px-3 py-2 text-xs text-[#F43F5E] dark:text-[#FECDD3]">
                   <strong>Motivo de cancelación:</strong> {selectedDelivery.cancellationReason}
                 </div>
               )}
@@ -357,26 +387,28 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                   <span>Cobros registrados en esta entrega</span>
                 </div>
                 {selectedPayments.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2]">
-                    Entrega a crédito (sin cobro inicial).
+                  <p className="text-xs text-slate-500 dark:text-[#9E8FB2]">
+                    {selectedDelivery.paymentTerm === 'CONTADO'
+                      ? 'Venta de contado; aún no hay pago registrado.'
+                      : 'Entrega a crédito (sin cobro inicial).'}
                   </p>
                 ) : (
                   <div className="space-y-1.5">
                     {selectedPayments.map((p) => (
                       <div
                         key={p.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#130824] px-3 py-2 text-xs"
                       >
                         <div>
                           <span className="font-mono font-bold text-slate-900 dark:text-white">
                             {formatCurrencyFromCentavos(p.amountCentavos)}
                           </span>
                           <span className="mx-1.5 text-slate-400">·</span>
-                          <span className="capitalize text-slate-700 dark:text-[#c3c5d8]">
+                          <span className="capitalize text-slate-700 dark:text-[#9E8FB2]">
                             {p.method}
                           </span>
                           <span className="mx-1.5 text-slate-400">·</span>
-                          <span className="text-slate-500 dark:text-[#8d90a2]">{p.note}</span>
+                          <span className="text-slate-500 dark:text-[#9E8FB2]">{p.note}</span>
                         </div>
 
                         {p.method === 'transferencia' ? (
@@ -396,7 +428,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                             {p.status === 'verificado' ? 'Verificada' : 'Por verificar'}
                           </TactileButton>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[#2E9B5B] dark:text-[#00f076] font-medium">
+                          <span className="inline-flex items-center gap-1 text-[#10B981] dark:text-[#10B981] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" /> Efectivo
                           </span>
                         )}
@@ -409,7 +441,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               {/* Immutable Delivery Events Log */}
               <div className="space-y-2">
                 <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-[#1d63ff]" />
+                  <History className="w-3.5 h-3.5 text-[#8A2BE2]" />
                   <span>Historial interno de la entrega (Bitácora inmutable)</span>
                 </div>
                 <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
@@ -419,12 +451,12 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                       className="flex items-start justify-between gap-3 py-1 border-b border-slate-200/60 dark:border-white/5 last:border-0"
                     >
                       <div>
-                        <span className="font-mono uppercase text-[10px] font-bold text-[#1E5FBF] dark:text-[#71ffe5] mr-2">
+                        <span className="font-mono uppercase text-[10px] font-bold text-[#8A2BE2] dark:text-[#C084FC] mr-2">
                           {ev.eventType}
                         </span>
-                        <span className="text-slate-700 dark:text-[#c3c5d8]">{ev.detail}</span>
+                        <span className="text-slate-700 dark:text-[#9E8FB2]">{ev.detail}</span>
                       </div>
-                      <span className="font-mono text-[11px] text-slate-500 dark:text-[#8d90a2] whitespace-nowrap">
+                      <span className="font-mono text-[11px] text-slate-500 dark:text-[#9E8FB2] whitespace-nowrap">
                         {formatMexicoCityDate(ev.occurredAtUtc)}{' '}
                         {formatMexicoCityTime(ev.occurredAtUtc)}
                       </span>
@@ -440,7 +472,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
         <div className="xl:col-span-5 glass-panel rounded-lg p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-[#1d63ff]" />
+              <FileText className="w-4 h-4 text-[#8A2BE2]" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Plantilla oficial de ticket 48mm
               </h3>
@@ -458,7 +490,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                   {showOfficialSample ? 'Ver entrega real' : 'Ver ejemplo oficial'}
                 </TactileButton>
               )}
-              <span className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+              <span className="text-[11px] font-mono text-slate-500 dark:text-[#9E8FB2]">
                 Ancho térmico 48mm
               </span>
             </div>
@@ -477,7 +509,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
             />
           ) : (
             <div className="space-y-3">
-              <div className="rounded border border-[#1E5FBF]/40 bg-[#1E5FBF]/10 px-3 py-2 text-[11px] text-[#1E5FBF] dark:text-[#71ffe5] text-center">
+              <div className="rounded border border-[#8A2BE2]/40 bg-[#8A2BE2]/10 px-3 py-2 text-[11px] text-[#8A2BE2] dark:text-[#C084FC] text-center">
                 Ejemplo visual oficial de plantilla 48mm (solo demostración visual; no afecta datos ni inventarios reales).
               </div>
               <Ticket48mm

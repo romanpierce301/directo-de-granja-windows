@@ -1,13 +1,36 @@
+using System.Text;
 using HuevoControl.Domain.Entities;
 using HuevoControl.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
 string sqlConn = builder.Configuration.GetConnectionString("SqlServer")
     ?? throw new InvalidOperationException("Falta ConnectionStrings:SqlServer.");
 string redisConn = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+string jwtKey = builder.Configuration["Jwt:SigningKey"]
+    ?? throw new InvalidOperationException("Falta Jwt:SigningKey.");
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("Jwt:SigningKey debe tener al menos 32 caracteres aleatorios.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = "huevocontrol-api",
+            ValidAudience = "huevocontrol-clients",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+builder.Services.AddAuthorization(options => options.AddPolicy("RequireDueno", policy => policy.RequireRole("dueno")));
 
 builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o => o.UseSqlServer(sqlConn));
 builder.Services.AddHealthChecks()
@@ -20,10 +43,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.MapHealthChecks("/api/monitoring/health");
-app.MapHub<AlertsHub>("/hubs/alerts");
+app.MapHub<AlertsHub>("/hubs/alerts").RequireAuthorization("RequireDueno");
 app.Run();
 
 public sealed class AlertsHub : Hub { }

@@ -33,14 +33,14 @@ export function IncidentesView({ state, onRefresh, onNotify }: IncidentesViewPro
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">
           Incidentes de dinero (pérdida, robo o faltante)
         </h2>
-        <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+        <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
           Registros inmutables: no se borran ni se editan; solo el dueño cambia el estado a Revisado y agrega una nota
         </p>
       </div>
 
       <div className="space-y-3">
         {state.moneyIncidents.length === 0 ? (
-          <div className="glass-panel rounded-lg p-8 text-center text-xs text-slate-500 dark:text-[#8d90a2]">
+          <div className="glass-panel rounded-lg p-8 text-center text-xs text-slate-500 dark:text-[#9E8FB2]">
             No hay incidentes de dinero reportados.
           </div>
         ) : (
@@ -51,18 +51,18 @@ export function IncidentesView({ state, onRefresh, onNotify }: IncidentesViewPro
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-[#D64545] dark:text-[#ff334b]" />
+                      <AlertCircle className="w-4 h-4 text-[#F43F5E] dark:text-[#F43F5E]" />
                       <span className="font-bold text-sm text-slate-900 dark:text-white capitalize">
                         {inc.type} · {inc.vendorName}
                       </span>
-                      <span className="font-mono font-bold text-sm text-[#D64545] dark:text-[#ff334b]">
+                      <span className="font-mono font-bold text-sm text-[#F43F5E] dark:text-[#F43F5E]">
                         {formatCurrencyFromCentavos(inc.amountCentavos)}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-600 dark:text-[#c3c5d8]">
+                    <p className="mt-1 text-xs text-slate-600 dark:text-[#9E8FB2]">
                       {inc.description}
                     </p>
-                    <p className="mt-1 text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                    <p className="mt-1 text-[11px] font-mono text-slate-500 dark:text-[#9E8FB2]">
                       {formatMexicoCityDate(inc.occurredAtUtc)}{' '}
                       {formatMexicoCityTime(inc.occurredAtUtc)} · Personas presentes:{' '}
                       {inc.peoplePresent.join(', ')}
@@ -88,7 +88,7 @@ export function IncidentesView({ state, onRefresh, onNotify }: IncidentesViewPro
                 </div>
 
                 {reviewed ? (
-                  <div className="rounded bg-[#2E9B5B]/10 border border-[#2E9B5B]/30 px-3 py-2 text-xs text-[#2E9B5B] dark:text-[#00f076]">
+                  <div className="rounded bg-[#10B981]/10 border border-[#10B981]/30 px-3 py-2 text-xs text-[#10B981] dark:text-[#10B981]">
                     <strong>Nota del dueño:</strong> {inc.ownerNote}
                   </div>
                 ) : (

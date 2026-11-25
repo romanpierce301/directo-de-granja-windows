@@ -33,13 +33,16 @@ export function Ticket48mm({
   onReprint,
 }: Ticket48mmProps) {
   const sortedBoxes = [...boxes].sort((a, b) => a.position - b.position);
-  const deliveryPaidCentavos = payments.reduce((acc, p) => acc + p.amountCentavos, 0);
+  const formatExactKg = (grams: number) => `${(grams / 1000).toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
+  const officialPayments = payments.filter((p) => p.reviewStatus !== 'pendiente' && p.reviewStatus !== 'rechazada');
+  const pendingReviewCentavos = payments.filter((p) => p.reviewStatus === 'pendiente').reduce((acc, p) => acc + p.amountCentavos, 0);
+  const deliveryPaidCentavos = officialPayments.reduce((acc, p) => acc + p.amountCentavos, 0);
   const deliveryBalanceCentavos = Math.max(0, delivery.totalToChargeCentavos - deliveryPaidCentavos);
 
   const methodSummary =
-    payments.length === 0
-      ? 'crédito'
-      : Array.from(new Set(payments.map((p) => p.method))).join('/');
+    officialPayments.length === 0
+      ? (delivery.paymentTerm === 'CONTADO' ? 'contado pendiente' : 'crédito')
+      : Array.from(new Set(officialPayments.map((p) => p.method))).join('/');
 
   const formattedDate = formatMexicoCityDate(delivery.createdAtUtc);
   const formattedTime = formatMexicoCityTime(delivery.createdAtUtc);
@@ -88,7 +91,7 @@ export function Ticket48mm({
 
         {/* Status stamps (CANCELADA in red, COPIA in gray — never yellow) */}
         {delivery.status === 'cancelada' && (
-          <div className="mt-2 border-2 border-[#D64545] text-[#D64545] text-center py-0.5 text-[11px] font-bold tracking-wider">
+          <div className="mt-2 border-2 border-[#F43F5E] text-[#F43F5E] text-center py-0.5 text-[11px] font-bold tracking-wider">
             CANCELADA
           </div>
         )}
@@ -117,14 +120,22 @@ export function Ticket48mm({
 
         <div className="my-2 border-t border-dashed border-black" />
 
-        {/* Boxes */}
-        <div className="space-y-0.5 text-[11px] leading-tight tabular-nums">
-          {sortedBoxes.map((box) => (
+        {/* Android delivery lines can contain several brands and prices. */}
+        <div className="space-y-1 text-[10px] leading-tight tabular-nums">
+          {delivery.items?.length ? delivery.items.map((item, index) => (
+            <div key={item.id} className="border-b border-dotted border-black/40 pb-0.5">
+              <div className="font-bold">{item.brand || `Producto ${index + 1}`} · {item.modality.replaceAll('_', ' ').toLowerCase()}</div>
+              <div className="flex justify-between"><span>Neto {formatExactKg(item.netGrams)}</span><span>{formatCurrencyFromCentavos(item.priceCentavosPerKg, true)}/kg</span></div>
+              <div className="flex justify-between"><span>{(item.boxesMilli / 1000).toLocaleString('es-MX')} cajas</span><span>{formatCurrencyFromCentavos(Math.round(item.subtotalMilliCentavos / 1000), true)}</span></div>
+            </div>
+          )) : sortedBoxes.map((box) => (
             <div key={box.id} className="flex items-center justify-between">
-              <span>Caja {box.position}</span>
-              <span>{formatKgFromGrams(box.weightGrams)}</span>
+              <span>Caja {box.position}</span><span>{formatKgFromGrams(box.weightGrams)}</span>
             </div>
           ))}
+          {delivery.sugar && (
+            <div className="flex justify-between font-semibold"><span>Azúcar · {delivery.sugar.sacksMilli / 1000} sacos</span><span>{formatCurrencyFromCentavos(delivery.sugar.subtotalCentavos, true)}</span></div>
+          )}
         </div>
 
         <div className="my-2 border-t border-dashed border-black" />
@@ -136,8 +147,8 @@ export function Ticket48mm({
             <span>{formatKgFromGrams(delivery.totalGrams)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Precio por kilo</span>
-            <span>{formatCurrencyFromCentavos(delivery.priceCentavosPerKg, true)}</span>
+            <span>{delivery.items?.length ? 'Total de producto' : 'Precio por kilo'}</span>
+            <span>{delivery.items?.length ? formatCurrencyFromCentavos(delivery.totalToChargeCentavos, true) : formatCurrencyFromCentavos(delivery.priceCentavosPerKg, true)}</span>
           </div>
           <div className="flex items-center justify-between font-bold text-[11.5px]">
             <span>TOTAL A COBRAR</span>
@@ -150,13 +161,16 @@ export function Ticket48mm({
         {/* Payments & Balance */}
         <div className="space-y-0.5 text-[10.5px] leading-tight tabular-nums">
           <div className="flex items-center justify-between">
-            <span>Pagado ({methodSummary})</span>
+            <span>{delivery.paymentTerm === 'CREDITO' ? 'Crédito' : delivery.paymentTerm === 'CONTADO' ? 'Contado' : 'Pagado'} ({methodSummary})</span>
             <span>{formatCurrencyFromCentavos(deliveryPaidCentavos)}</span>
           </div>
           <div className="flex items-center justify-between font-bold">
             <span>Saldo de esta entrega</span>
             <span>{formatCurrencyFromCentavos(deliveryBalanceCentavos)}</span>
           </div>
+          {pendingReviewCentavos > 0 && (
+            <div className="flex items-center justify-between"><span>Cobro pendiente de revisión</span><span>{formatCurrencyFromCentavos(pendingReviewCentavos)}</span></div>
+          )}
           <div className="flex items-center justify-between">
             <span>Saldo total del cliente</span>
             <span>{formatCurrencyFromCentavos(customerTotalBalanceCentavos)}</span>

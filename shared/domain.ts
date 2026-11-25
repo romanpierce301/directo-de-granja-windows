@@ -9,7 +9,9 @@ export type UserRole = 'dueno' | 'vendedor';
 export type UserStatus = 'pendiente' | 'activa' | 'bloqueada';
 export type PriceOrigin = 'dueno' | 'vendedor';
 export type DeliveryStatus = 'vigente' | 'cancelada';
+export type ReviewStatus = 'pendiente' | 'aprobada' | 'rechazada';
 export type PaymentMethod = 'efectivo' | 'transferencia';
+export type DeliveryPaymentTerm = 'CONTADO' | 'CREDITO';
 export type PaymentStatus = 'verificado' | 'por_verificar';
 export type IncidentType = 'perdida' | 'robo' | 'faltante' | 'otro';
 export type IncidentStatus = 'reportado' | 'revisado';
@@ -39,6 +41,7 @@ export interface AuthorizedDevice {
   active: boolean;
   lastSyncUtc: string | null;
   pendingSyncCount: number;
+  folioBlocks?: Array<{ series: string; start: number; end: number; usedNumbers: number[] }>;
 }
 
 export interface CrewMember {
@@ -64,6 +67,8 @@ export interface Customer {
   phone: string;
   address: string;
   notes: string;
+  specialPriceCentavosPerKg?: number | null;
+  creditTermDays?: number | null;
   active: boolean;
   createdByUserId: string;
   mergedIntoCustomerId: string | null;
@@ -143,6 +148,12 @@ export interface Delivery {
   totalGrams: number;
   calculatedTotalExactMilliCentavos: number;
   totalToChargeCentavos: number;
+  /** Condición comercial registrada por Android; forma de pago va en Payment.method. */
+  paymentTerm?: DeliveryPaymentTerm;
+  items?: DeliveryItem[];
+  sugar?: DeliverySugar;
+  reviewStatus?: ReviewStatus;
+  reviewNote?: string | null;
   status: DeliveryStatus;
   cancellationReason: string | null;
   syncedAtUtc: string | null;
@@ -150,6 +161,27 @@ export interface Delivery {
   brandKey?: string | null;
   brandName?: string | null;
   boxesCount?: number | null;
+}
+
+/** Una línea pesada de Android. Los pesos se expresan en gramos enteros y precio en centavos/kg. */
+export interface DeliveryItem {
+  id: string;
+  brand: string;
+  modality: 'CAJA_COMPLETA' | 'MEDIA_CAJA' | 'MEDIA_CAJA_PESADA' | string;
+  boxesMilli: number;
+  grossGrams: number;
+  tareGrams: number;
+  netGrams: number;
+  priceCentavosPerKg: number;
+  subtotalMilliCentavos: number;
+}
+
+export interface DeliverySugar {
+  sacksMilli: number;
+  weightPerSackGrams: number;
+  pricePerSackCentavos: number;
+  subtotalCentavos: number;
+  subtotalMilliCentavos?: number;
 }
 
 export interface DailyLoss {
@@ -161,6 +193,8 @@ export interface DailyLoss {
   lostGrams: number;
   note: string;
   createdAtUtc: string;
+  driverName?: string;
+  helpersNames?: string[];
 }
 
 export interface Payment {
@@ -173,6 +207,7 @@ export interface Payment {
   status: PaymentStatus;
   createdAtUtc: string;
   note: string;
+  reviewStatus?: ReviewStatus;
 }
 
 export interface MoneyIncident {
@@ -274,9 +309,8 @@ export interface RoundingResult {
  * Regla de redondeo exacta de Directo de Granja (Casos C1-C6, R1-R5):
  * - Pesos en gramos enteros, nunca se redondean.
  * - Solo se redondea el total a cobrar una sola vez:
- *   - Centavos de 1 a 49 (estrictamente menor a 50.000): baja al entero anterior.
- *   - Exactamente 50 centavos (50.000): se queda en .50.
- *   - Centavos de 51 a 99 (o cualquier fraccion > 50.000 como 62.5): sube al entero siguiente.
+ *   - Primero redondea el importe bruto a centavos (como Android, HALF_UP).
+ *   - Después aplica el redondeo comercial: <50 baja, =50 conserva .50, >50 sube.
  */
 export function calculateDeliveryTotals(
   boxesGrams: number[],
@@ -296,13 +330,17 @@ export function calculateDeliveryTotals(
 
   const totalGrams = boxesGrams.reduce((acc, g) => acc + g, 0);
   const rawScaled = BigInt(totalGrams) * BigInt(priceCentavosPerKg); // units: 1/1000 of a centavo (100_000 = $1 MXN)
-  const pesos = rawScaled / 100000n;
-  const rem = rawScaled % 100000n;
+  const exactCentavos = rawScaled / 1000n;
+  const centavoRemainder = rawScaled % 1000n;
+  const roundedCentavos =
+    exactCentavos + (centavoRemainder >= 500n ? 1n : 0n);
+  const pesos = roundedCentavos / 100n;
+  const rem = roundedCentavos % 100n;
 
   let totalToChargeCentavos: number;
-  if (rem < 50000n) {
+  if (rem < 50n) {
     totalToChargeCentavos = Number(pesos * 100n);
-  } else if (rem === 50000n) {
+  } else if (rem === 50n) {
     totalToChargeCentavos = Number(pesos * 100n + 50n);
   } else {
     totalToChargeCentavos = Number((pesos + 1n) * 100n);
@@ -325,6 +363,55 @@ export function calculateDeliveryTotals(
     calculatedExactLabel,
     calculatedExactMilliCentavos: Number(rawScaled),
     totalToChargeCentavos,
+  };
+}
+
+/** Calcula una entrega con varios productos/precios y redondea una sola vez el total, igual que Android. */
+export function calculateDeliveryItemsTotals(
+  items: Array<Pick<DeliveryItem, 'grossGrams' | 'tareGrams' | 'netGrams' | 'priceCentavosPerKg'>>,
+  additionalMilliCentavos = 0,
+  additionalGrams = 0,
+): RoundingResult {
+  if (!items.length && additionalMilliCentavos <= 0) throw new Error('La entrega debe incluir al menos un producto pesado.');
+  if (!Number.isSafeInteger(additionalMilliCentavos) || additionalMilliCentavos < 0 ||
+      !Number.isSafeInteger(additionalGrams) || additionalGrams < 0) {
+    throw new Error('Los importes adicionales no son válidos.');
+  }
+  let totalGrams = additionalGrams;
+  let rawScaled = BigInt(additionalMilliCentavos);
+  for (const item of items) {
+    if (![item.grossGrams, item.tareGrams, item.netGrams].every(Number.isSafeInteger) ||
+        item.grossGrams <= 0 || item.tareGrams < 0 || item.netGrams <= 0 ||
+        item.netGrams > item.grossGrams) {
+      throw new Error('El peso bruto, tara y neto de cada producto no son válidos.');
+    }
+    if (!Number.isSafeInteger(item.priceCentavosPerKg) || item.priceCentavosPerKg <= 0 || item.priceCentavosPerKg > 50_000) {
+      throw new Error('Cada producto debe tener un precio por kilo válido.');
+    }
+    totalGrams += item.netGrams;
+    rawScaled += BigInt(item.netGrams) * BigInt(item.priceCentavosPerKg);
+  }
+  const exactCentavos = rawScaled / 1000n;
+  const roundedCentavos = exactCentavos + (rawScaled % 1000n >= 500n ? 1n : 0n);
+  const pesos = roundedCentavos / 100n;
+  const cents = roundedCentavos % 100n;
+  const totalToChargeCentavos =
+    cents < 50n ? pesos * 100n :
+    cents === 50n ? pesos * 100n + 50n :
+    (pesos + 1n) * 100n;
+  const milliCentavos = rawScaled;
+  const wholeCentavos = milliCentavos / 1000n;
+  const milliRem = milliCentavos % 1000n;
+  const labelPesos = wholeCentavos / 100n;
+  const labelCents = String(wholeCentavos % 100n).padStart(2, '0');
+  const calculatedExactLabel = milliRem === 0n
+    ? `$${labelPesos.toLocaleString('es-MX')}.${labelCents}`
+    : `$${labelPesos.toLocaleString('es-MX')}.${labelCents}${milliRem / 100n}`;
+  return {
+    totalGrams,
+    calculatedExactLabel,
+    calculatedExactMilliCentavos: Number(rawScaled),
+    totalToChargeCentavos: Number(totalToChargeCentavos),
   };
 }
 
@@ -444,7 +531,7 @@ export function calculateVendorClosing(params: {
   incidents: MoneyIncident[];
   actualCashHandedInCentavos: number;
 }) {
-  const validDeliveries = params.deliveries.filter((d) => d.status === 'vigente');
+  const validDeliveries = params.deliveries.filter((d) => d.status === 'vigente' && d.reviewStatus !== 'pendiente' && d.reviewStatus !== 'rechazada');
   const soldCentavos = validDeliveries.reduce((acc, d) => acc + d.totalToChargeCentavos, 0);
 
   // Exclude payments tied solely to cancelled deliveries
@@ -452,7 +539,7 @@ export function calculateVendorClosing(params: {
     params.deliveries.filter((d) => d.status === 'cancelada').map((d) => d.id)
   );
   const activePayments = params.payments.filter(
-    (p) => !p.deliveryId || !cancelledIds.has(p.deliveryId)
+    (p) => p.reviewStatus !== 'pendiente' && p.reviewStatus !== 'rechazada' && (!p.deliveryId || !cancelledIds.has(p.deliveryId))
   );
 
   const cashCollectedCentavos = activePayments
@@ -501,7 +588,7 @@ export function calculateCustomerLedger(
   payments: Payment[]
 ) {
   const validDeliveries = deliveries.filter(
-    (d) => d.customerId === customerId && d.status === 'vigente'
+    (d) => d.customerId === customerId && d.status === 'vigente' && d.reviewStatus !== 'pendiente' && d.reviewStatus !== 'rechazada'
   );
   const cancelledIds = new Set(
     deliveries
@@ -509,7 +596,7 @@ export function calculateCustomerLedger(
       .map((d) => d.id)
   );
   const customerPayments = payments.filter(
-    (p) => p.customerId === customerId && (!p.deliveryId || !cancelledIds.has(p.deliveryId))
+    (p) => p.customerId === customerId && p.reviewStatus !== 'pendiente' && p.reviewStatus !== 'rechazada' && (!p.deliveryId || !cancelledIds.has(p.deliveryId))
   );
 
   const totalBoughtCentavos = validDeliveries.reduce(
@@ -602,7 +689,33 @@ export function calculateBrandInventory(
   }
 
   for (const d of deliveries) {
-    if (d.status !== 'vigente') continue;
+    if (d.status !== 'vigente' || d.reviewStatus === 'rechazada') continue;
+    if (d.items?.length) {
+      for (const item of d.items) {
+        const key = normalizeBrandName(item.brand);
+        if (!key) continue;
+        const boxes = item.boxesMilli / 1000;
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, {
+            brandKey: key,
+            brandName: item.brand.trim() || key,
+            boxesArrived: 0,
+            boxesSold: boxes,
+            boxesAvailable: -boxes,
+            gramsArrived: 0,
+            gramsSold: item.grossGrams,
+            gramsAvailable: 0,
+            avgGramsPerBox: 0,
+            lastArrivalUtc: null,
+          });
+        } else {
+          existing.boxesSold += boxes;
+          existing.gramsSold += item.grossGrams;
+        }
+      }
+      continue;
+    }
     const key = d.brandKey || (d.brandName ? normalizeBrandName(d.brandName) : '');
     if (!key) continue;
 

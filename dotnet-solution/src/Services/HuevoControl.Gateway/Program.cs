@@ -8,6 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 string jwtKey = builder.Configuration["Jwt:SigningKey"]
     ?? throw new InvalidOperationException("Falta configurar Jwt:SigningKey.");
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("Jwt:SigningKey debe tener al menos 32 caracteres aleatorios.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>

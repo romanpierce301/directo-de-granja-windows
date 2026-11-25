@@ -29,6 +29,8 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [specialPrice, setSpecialPrice] = useState('');
+  const [creditDays, setCreditDays] = useState('');
 
   // Abono posterior fields
   const [abonoPesos, setAbonoPesos] = useState('');
@@ -84,12 +86,18 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
   const handleCreateCustomer = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.createCustomer({ businessName, contactName, phone, address, notes });
+      await apiClient.createCustomer({
+        businessName, contactName, phone, address, notes,
+        specialPricePesosPerKg: specialPrice.trim() ? Number(specialPrice) : null,
+        creditTermDays: creditDays.trim() ? Number(creditDays) : null,
+      });
       setBusinessName('');
       setContactName('');
       setPhone('');
       setAddress('');
       setNotes('');
+      setSpecialPrice('');
+      setCreditDays('');
       setShowNew(false);
       await onRefresh();
       onNotify('Cliente agregado al directorio compartido.');
@@ -134,7 +142,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Directorio de clientes y cuentas por cobrar
           </h2>
-          <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
             Los saldos se calculan en tiempo real desde entregas vigentes y pagos · Nunca se editan a mano
           </p>
         </div>
@@ -179,10 +187,10 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
       {showMerge && (
         <form
           onSubmit={handleMerge}
-          className="glass-panel rounded-lg p-4 border border-[#1d63ff]/40 grid grid-cols-1 md:grid-cols-3 gap-3 items-end"
+          className="glass-panel rounded-lg p-4 border border-[#8A2BE2]/40 grid grid-cols-1 md:grid-cols-3 gap-3 items-end"
         >
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Cliente principal (se conserva)
             </label>
             <select
@@ -200,7 +208,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Cliente duplicado (se fusiona aquí)
             </label>
             <select
@@ -234,7 +242,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
           className="glass-panel rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
         >
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Nombre del negocio *
             </label>
             <input
@@ -245,7 +253,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Contacto
             </label>
             <input
@@ -255,7 +263,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Teléfono
             </label>
             <input
@@ -265,7 +273,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Dirección
             </label>
             <input
@@ -273,6 +281,14 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
               onChange={(e) => setAddress(e.target.value)}
               className="input-recessed w-full rounded px-3 py-1.5 text-xs"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">Precio especial por kg (opcional)</label>
+            <input type="number" min="0.01" step="0.01" value={specialPrice} onChange={(e) => setSpecialPrice(e.target.value)} className="input-recessed w-full rounded px-3 py-1.5 text-xs" placeholder="Ej. 37.50" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">Plazo de crédito en días (opcional)</label>
+            <input type="number" min="0" max="3650" step="1" value={creditDays} onChange={(e) => setCreditDays(e.target.value)} className="input-recessed w-full rounded px-3 py-1.5 text-xs" placeholder="Ej. 7" />
           </div>
           <TactileButton type="submit" variant="emerald" size="sm">
             Guardar cliente
@@ -284,7 +300,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
         <div className="xl:col-span-7 glass-panel rounded-lg overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#8d90a2]">
+              <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#9E8FB2]">
                 <th className="py-2.5 px-4 font-semibold">Cliente</th>
                 <th className="py-2.5 px-3 font-semibold">Teléfono</th>
                 <th className="py-2.5 px-3 font-semibold text-right">Comprado</th>
@@ -301,31 +317,31 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                     key={c.id}
                     onClick={() => setSelectedId(c.id)}
                     className={`cursor-pointer transition-colors ${
-                      isSelected ? 'bg-[#1d63ff]/15' : 'hover:bg-[#1d63ff]/5'
+                      isSelected ? 'bg-[#8A2BE2]/15' : 'hover:bg-[#8A2BE2]/5'
                     }`}
                   >
                     <td className="py-2.5 px-4">
                       <div className="font-semibold text-slate-900 dark:text-white">
                         {c.businessName}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">
+                      <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">
                         {c.contactName || 'Sin contacto'} · {c.address || 'Sin dirección'}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-[#c3c5d8]">
+                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-[#9E8FB2]">
                       {c.phone || '—'}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700 dark:text-[#c3c5d8]">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700 dark:text-[#9E8FB2]">
                       {formatCurrencyFromCentavos(ledger.totalBoughtCentavos)}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#2E9B5B] dark:text-[#00f076]">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#10B981] dark:text-[#10B981]">
                       {formatCurrencyFromCentavos(ledger.totalPaidCentavos)}
                     </td>
                     <td
                       className={`py-2.5 px-4 text-right font-mono tabular-nums font-bold ${
                         ledger.balanceCentavos > 0
-                          ? 'text-[#D64545] dark:text-[#ff334b]'
-                          : 'text-[#2E9B5B] dark:text-[#00f076]'
+                          ? 'text-[#F43F5E] dark:text-[#F43F5E]'
+                          : 'text-[#10B981] dark:text-[#10B981]'
                       }`}
                     >
                       {formatCurrencyFromCentavos(ledger.balanceCentavos)}
@@ -346,17 +362,17 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
                     {selectedCustomer.businessName}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2]">
+                  <p className="text-xs text-slate-500 dark:text-[#9E8FB2]">
                     {selectedCustomer.notes || 'Cuenta corriente de cliente'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] text-slate-500 dark:text-[#8d90a2]">Saldo total</div>
+                  <div className="text-[11px] text-slate-500 dark:text-[#9E8FB2]">Saldo total</div>
                   <div
                     className={`text-lg font-bold font-mono tabular-nums ${
                       selectedLedger.balanceCentavos > 0
-                        ? 'text-[#D64545] dark:text-[#ff334b]'
-                        : 'text-[#2E9B5B] dark:text-[#00f076]'
+                        ? 'text-[#F43F5E] dark:text-[#F43F5E]'
+                        : 'text-[#10B981] dark:text-[#10B981]'
                     }`}
                   >
                     {formatCurrencyFromCentavos(selectedLedger.balanceCentavos)}
@@ -368,10 +384,10 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
               {selectedLedger.balanceCentavos > 0 && (
                 <form
                   onSubmit={handleRecordAbono}
-                  className="rounded-md bg-slate-100/80 dark:bg-[#0d121c] p-3 space-y-2.5 border border-slate-200 dark:border-white/10"
+                  className="rounded-md bg-slate-100/80 dark:bg-[#130824] p-3 space-y-2.5 border border-slate-200 dark:border-white/10"
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
-                    <Wallet className="w-3.5 h-3.5 text-[#1d63ff]" />
+                    <Wallet className="w-3.5 h-3.5 text-[#8A2BE2]" />
                     <span>Registrar abono posterior</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -420,11 +436,11 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                       className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-white/5"
                     >
                       <div>
-                        <span className="font-mono font-bold text-[#1E5FBF] dark:text-[#b5c4ff]">
+                        <span className="font-mono font-bold text-[#8A2BE2] dark:text-[#C084FC]">
                           {d.folioFormatted}
                         </span>
                         <span className="mx-1.5 text-slate-400">·</span>
-                        <span className="text-slate-600 dark:text-[#c3c5d8]">
+                        <span className="text-slate-600 dark:text-[#9E8FB2]">
                           {formatMexicoCityDate(d.createdAtUtc)}
                         </span>
                       </div>
@@ -442,7 +458,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                   {selectedPayments.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-white/5 text-[#2E9B5B] dark:text-[#00f076]"
+                      className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-white/5 text-[#10B981] dark:text-[#10B981]"
                     >
                       <div>
                         <span className="font-semibold capitalize">Pago ({p.method})</span>
@@ -461,7 +477,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
               </div>
             </>
           ) : (
-            <p className="text-xs text-slate-500 dark:text-[#8d90a2] text-center py-10">
+            <p className="text-xs text-slate-500 dark:text-[#9E8FB2] text-center py-10">
               Seleccione un cliente para consultar su cuenta.
             </p>
           )}

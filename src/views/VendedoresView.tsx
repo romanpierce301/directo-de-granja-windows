@@ -89,7 +89,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Vendedores, folios y dispositivos
           </h2>
-          <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
             Solo las cuentas aprobadas reciben clientes y precio del día · Un dispositivo activo por cuenta
           </p>
         </div>
@@ -110,7 +110,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
           className="glass-panel rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
         >
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Nombre completo
             </label>
             <input
@@ -122,7 +122,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Correo de Google / acceso
             </label>
             <input
@@ -135,7 +135,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Contraseña (mín. 8 car.)
             </label>
             <input
@@ -149,7 +149,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-slate-500 dark:text-[#9E8FB2] mb-1">
               Rol RBAC
             </label>
             <select
@@ -187,11 +187,11 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">
                       {v.name}
                     </h3>
-                    <span className="font-mono text-xs text-[#1E5FBF] dark:text-[#71ffe5] font-semibold">
+                    <span className="font-mono text-xs text-[#8A2BE2] dark:text-[#C084FC] font-semibold">
                       {v.folioSeries ? `Serie ${v.folioSeries}` : 'Sin serie'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-[#9E8FB2] mt-0.5">
                     {v.googleEmail}
                   </p>
                 </div>
@@ -228,24 +228,24 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
 
               {/* Devices list */}
               <div className="border-t border-slate-200 dark:border-white/10 pt-3 space-y-2">
-                <div className="text-xs font-semibold text-slate-700 dark:text-[#c3c5d8]">
+                <div className="text-xs font-semibold text-slate-700 dark:text-[#9E8FB2]">
                   Equipos Android vinculados
                 </div>
                 {vendorDevices.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2]">
+                  <p className="text-xs text-slate-500 dark:text-[#9E8FB2]">
                     Sin teléfono registrado aún.
                   </p>
                 ) : (
                   vendorDevices.map((dev) => (
                     <div
                       key={dev.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2 text-xs"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#130824] px-3 py-2 text-xs"
                     >
                       <div className="flex items-center gap-2">
                         <Smartphone
                           className={`w-4 h-4 ${
                             dev.active
-                              ? 'text-[#2E9B5B] dark:text-[#00f076]'
+                              ? 'text-[#10B981] dark:text-[#10B981]'
                               : 'text-slate-400'
                           }`}
                         />
@@ -253,7 +253,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
                           <div className="font-medium text-slate-900 dark:text-white">
                             {dev.deviceName}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#9E8FB2]">
                             {dev.lastSyncUtc
                               ? `Última sync: ${formatMexicoCityDate(dev.lastSyncUtc)} ${formatMexicoCityTime(dev.lastSyncUtc)}`
                               : 'Sin sincronizar'}
@@ -292,9 +292,9 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
               <div>
                 <span className="font-semibold text-slate-900 dark:text-white">{o.name}</span>
                 <span className="mx-2 text-slate-400">·</span>
-                <span className="text-slate-500 dark:text-[#8d90a2]">{o.googleEmail}</span>
+                <span className="text-slate-500 dark:text-[#9E8FB2]">{o.googleEmail}</span>
               </div>
-              <span className="font-mono text-[#2E9B5B] dark:text-[#00f076] font-medium">
+              <span className="font-mono text-[#10B981] dark:text-[#10B981] font-medium">
                 Rol Dueño · Activa
               </span>
             </div>
@@ -311,10 +311,10 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
           {state.crewMembers.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2"
+              className="flex items-center justify-between rounded bg-slate-100/70 dark:bg-[#130824] px-3 py-2"
             >
               <span className="font-semibold text-slate-900 dark:text-white">{member.name}</span>
-              <span className="font-mono uppercase text-[11px] text-[#1E5FBF] dark:text-[#71ffe5] font-semibold">
+              <span className="font-mono uppercase text-[11px] text-[#8A2BE2] dark:text-[#C084FC] font-semibold">
                 {member.roleTitle}
               </span>
             </div>

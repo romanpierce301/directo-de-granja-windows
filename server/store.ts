@@ -29,7 +29,7 @@ import {
   type WarehouseShipment,
   type Workday,
 } from '../shared/domain.ts';
-import { hashPassword } from './security.ts';
+import { hashPassword, protectSensitive, revealSensitive, validateSecurityConfiguration, verifyPassword } from './security.ts';
 
 export interface LedgerDatabase {
   users: UserAccount[];
@@ -59,79 +59,24 @@ function createSeedDatabase(): LedgerDatabase {
   const nowIso = new Date().toISOString();
 
   const ownerId = 'usr-owner-01';
-  const vendorTonyId = 'usr-vend-tony';
-  const vendorHunterId = 'usr-vend-hunter';
-  const vendorVictorId = 'usr-vend-victor';
-  const vendorIvanId = 'usr-vend-ivan';
+  const initialOwnerEmail = process.env.INITIAL_OWNER_EMAIL?.trim().toLowerCase();
+  const initialOwnerPassword = process.env.INITIAL_OWNER_PASSWORD;
+  if (!initialOwnerEmail || !initialOwnerEmail.includes('@') || !initialOwnerPassword || initialOwnerPassword.length < 12) {
+    throw new Error('Para inicializar una base nueva configure INITIAL_OWNER_EMAIL y INITIAL_OWNER_PASSWORD (mínimo 12 caracteres).');
+  }
 
-  const ownerHash = hashPassword('Granja2026!');
-  const vendorHash = hashPassword('Vendedor2026!');
+  const users: UserAccount[] = [{
+    id: ownerId,
+    googleEmail: initialOwnerEmail,
+    name: process.env.INITIAL_OWNER_NAME?.trim() || 'Dueño',
+    role: 'dueno',
+    status: 'activa',
+    folioSeries: null,
+    createdAtUtc: nowIso,
+    passwordHash: hashPassword(initialOwnerPassword),
+  }];
 
-  const users: UserAccount[] = [
-    {
-      id: ownerId,
-      googleEmail: 'dueno@directodegranja.mx',
-      name: 'Don Juan',
-      role: 'dueno',
-      status: 'activa',
-      folioSeries: null,
-      createdAtUtc: nowIso,
-      passwordHash: ownerHash,
-    },
-    {
-      id: vendorTonyId,
-      googleEmail: 'tony@directodegranja.mx',
-      name: 'Tony (Encargado)',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'A',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorHunterId,
-      googleEmail: 'hunter@directodegranja.mx',
-      name: 'Hunter',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'B',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorVictorId,
-      googleEmail: 'victor@directodegranja.mx',
-      name: 'Victor',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'C',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorIvanId,
-      googleEmail: 'ivan@directodegranja.mx',
-      name: 'Ivan',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'D',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-  ];
-
-  const crewMembers: CrewMember[] = [
-    { id: 'crew-tony', userId: vendorTonyId, name: 'Tony', roleTitle: 'encargado', active: true },
-    { id: 'crew-hunter', userId: vendorHunterId, name: 'Hunter', roleTitle: 'chofer', active: true },
-    { id: 'crew-victor', userId: vendorVictorId, name: 'Victor', roleTitle: 'chofer', active: true },
-    { id: 'crew-ivan', userId: vendorIvanId, name: 'Ivan', roleTitle: 'chofer', active: true },
-    { id: 'crew-cristian', userId: vendorTonyId, name: 'Cristian', roleTitle: 'chalan', active: true },
-    { id: 'crew-mateo', userId: vendorTonyId, name: 'Mateo', roleTitle: 'chalan', active: true },
-    { id: 'crew-orlando', userId: vendorTonyId, name: 'Orlando', roleTitle: 'chalan', active: true },
-    { id: 'crew-papas', userId: vendorHunterId, name: 'Papas', roleTitle: 'chalan', active: true },
-    { id: 'crew-sapito', userId: vendorHunterId, name: 'Sapito', roleTitle: 'chalan', active: true },
-    { id: 'crew-brody', userId: vendorHunterId, name: 'Brody', roleTitle: 'chalan', active: true },
-  ];
+  const crewMembers: CrewMember[] = [];
 
   return {
     users,
@@ -167,6 +112,7 @@ class LedgerStore {
   private db: LedgerDatabase;
 
   constructor() {
+    validateSecurityConfiguration();
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
@@ -177,9 +123,46 @@ class LedgerStore {
         this.db.warehouseShipments ??= [];
         this.db.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1 };
         this.db.settings.nextFolioBySeries.BD ??= 1;
+        let migrated = false;
+        for (const customer of this.db.customers ?? []) {
+          for (const field of ['phone', 'contactName', 'address', 'notes'] as const) {
+            const value = customer[field];
+            if (value && !value.startsWith('enc:v1:')) {
+              customer[field] = protectSensitive(value);
+              migrated = true;
+            }
+          }
+        }
+
+        const defaultOwner = this.db.users.find((user) =>
+          user.googleEmail.toLowerCase() === 'dueno@directodegranja.mx' &&
+          verifyPassword('Granja2026!', user.passwordHash)
+        );
+        if (defaultOwner) {
+          const email = process.env.INITIAL_OWNER_EMAIL?.trim().toLowerCase();
+          const password = process.env.INITIAL_OWNER_PASSWORD;
+          if (!email || !email.includes('@') || !password || password.length < 12) {
+            throw new Error('La base contiene la cuenta inicial insegura; configure INITIAL_OWNER_EMAIL y INITIAL_OWNER_PASSWORD (mínimo 12 caracteres) para sustituirla.');
+          }
+          if (this.db.users.some((user) => user.id !== defaultOwner.id && user.googleEmail.toLowerCase() === email)) {
+            throw new Error('INITIAL_OWNER_EMAIL ya pertenece a otra cuenta de la base.');
+          }
+          defaultOwner.googleEmail = email;
+          defaultOwner.name = process.env.INITIAL_OWNER_NAME?.trim() || defaultOwner.name;
+          defaultOwner.passwordHash = hashPassword(password);
+          migrated = true;
+
+          for (const user of this.db.users) {
+            if (user.role === 'vendedor' && verifyPassword('Vendedor2026!', user.passwordHash)) {
+              user.status = 'bloqueada';
+              user.passwordHash = hashPassword(crypto.randomBytes(32).toString('hex'));
+              migrated = true;
+            }
+          }
+        }
+        if (migrated) this.persist();
       } catch {
-        this.db = createSeedDatabase();
-        this.persist();
+        throw new Error(`No se pudo leer ${DATA_FILE}; se conserva el archivo para recuperación y no se sobrescribe con datos vacíos.`);
       }
     } else {
       this.db = createSeedDatabase();
@@ -199,6 +182,13 @@ class LedgerStore {
   } {
     return {
       ...this.db,
+      customers: this.db.customers.map((customer) => ({
+        ...customer,
+        phone: revealSensitive(customer.phone),
+        contactName: revealSensitive(customer.contactName),
+        address: revealSensitive(customer.address),
+        notes: revealSensitive(customer.notes),
+      })),
       users: this.db.users.map(({ passwordHash: _ph, ...safe }) => safe),
       alerts: this.computeProactiveAlerts(),
     };
@@ -314,7 +304,7 @@ class LedgerStore {
     const activeCustomers = this.db.customers.filter((c) => !c.mergedIntoCustomerId);
     const seenNames = new Map<string, Customer>();
     for (const c of activeCustomers) {
-      const key = `${normalizeCustomerName(c.businessName)}|${normalizePhone(c.phone)}`;
+      const key = `${normalizeCustomerName(c.businessName)}|${normalizePhone(revealSensitive(c.phone))}`;
       if (seenNames.has(key)) {
         const id = `alert-dup-cust-${c.id}`;
         alerts.push({

@@ -107,6 +107,7 @@ public sealed class DomainAndSecurityTests
             Status = UserStatus.Activa,
             FolioSeries = "A"
         });
+        db.Customers.Add(new Customer { Id = "c1", BusinessName = "Abarrotes López", Active = true });
         await db.SaveChangesAsync();
 
         var publisher = new NoOpPublisher();

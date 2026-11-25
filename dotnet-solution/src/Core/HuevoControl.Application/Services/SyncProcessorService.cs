@@ -48,9 +48,32 @@ public sealed class SyncProcessorService
         int accepted = 0;
         int skipped = 0;
         DateTime now = DateTime.UtcNow;
+        var batchIds = new HashSet<string>(StringComparer.Ordinal);
+        var batchFolios = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var dto in request.Deliveries)
         {
+            if (string.IsNullOrWhiteSpace(dto.Id) || dto.Id.Length > 80 ||
+                string.IsNullOrWhiteSpace(dto.CustomerId) || dto.CustomerId.Length > 80 ||
+                string.IsNullOrWhiteSpace(dto.WorkdayId) || dto.WorkdayId.Length > 80 ||
+                dto.FolioNumber is < 1 or > 999_999 || dto.PriceCentavosPerKg is < 1 or > 50_000 ||
+                dto.BoxesGrams is null || dto.BoxesGrams.Count is < 1 or > 500 ||
+                dto.BoxesGrams.Any(g => g is < 1 or > 200_000))
+                continue;
+
+            if (!batchIds.Add(dto.Id))
+            {
+                skipped++;
+                continue;
+            }
+
+            string folioFormatted = $"{vendor.FolioSeries}-{dto.FolioNumber:D4}";
+            if (!batchFolios.Add(folioFormatted) || await _db.Deliveries.AnyAsync(d => d.FolioFormatted == folioFormatted, ct))
+            {
+                skipped++;
+                continue;
+            }
+
             bool exists = await _db.Deliveries.AnyAsync(d => d.Id == dto.Id, ct);
             if (exists)
             {
@@ -58,9 +81,12 @@ public sealed class SyncProcessorService
                 continue;
             }
 
-            var calc = DeliveryCalculator.Calculate(dto.BoxesGrams.ToArray(), dto.PriceCentavosPerKg);
-            string folioFormatted = $"{vendor.FolioSeries}-{dto.FolioNumber:D4}";
+            var customer = await _db.Customers.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == dto.CustomerId && c.Active && c.MergedIntoCustomerId == null, ct);
+            if (customer is null)
+                continue;
 
+            var calc = DeliveryCalculator.Calculate(dto.BoxesGrams.ToArray(), dto.PriceCentavosPerKg);
             var delivery = new Delivery
             {
                 Id = dto.Id,
@@ -72,7 +98,7 @@ public sealed class SyncProcessorService
                 FolioNumber = dto.FolioNumber,
                 FolioFormatted = folioFormatted,
                 CustomerId = dto.CustomerId,
-                CustomerName = dto.CustomerName,
+                CustomerName = customer.BusinessName,
                 CreatedAtUtc = dto.CreatedAtUtc,
                 PriceCentavosPerKg = dto.PriceCentavosPerKg,
                 IsSpecialPrice = dto.IsSpecialPrice,

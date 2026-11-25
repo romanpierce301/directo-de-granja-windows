@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using HuevoControl.Application.Abstractions;
 using HuevoControl.Domain.Entities;
 using HuevoControl.Domain.Rules;
@@ -16,6 +17,8 @@ string sqlConn = builder.Configuration.GetConnectionString("SqlServer")
 string redisConn = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
 string jwtKey = builder.Configuration["Jwt:SigningKey"]
     ?? throw new InvalidOperationException("Falta Jwt:SigningKey.");
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("Jwt:SigningKey debe tener al menos 32 caracteres aleatorios.");
 
 builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o => o.UseSqlServer(sqlConn));
 builder.Services.AddScoped<IHuevoControlDbContext>(sp => sp.GetRequiredService<HuevoControlSqlServerDbContext>());
@@ -58,6 +61,7 @@ app.MapGet("/api/ledger/deliveries", async (IHuevoControlDbContext db, Cancellat
 
 app.MapPost("/api/ledger/prices", async (
     PublishPriceDto dto,
+    ClaimsPrincipal user,
     IHuevoControlDbContext db,
     IRedisCacheService cache,
     CancellationToken ct) =>
@@ -68,8 +72,8 @@ app.MapPost("/api/ledger/prices", async (
         Id = Guid.NewGuid().ToString("N"),
         DateYmd = dto.DateYmd,
         PriceCentavosPerKg = dto.PriceCentavosPerKg,
-        PublishedByUserId = dto.OwnerId,
-        PublishedByName = dto.OwnerName,
+        PublishedByUserId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+        PublishedByName = user.Identity?.Name ?? string.Empty,
         Origin = PriceOrigin.Dueno,
         ReviewedByOwner = true
     };
@@ -81,20 +85,23 @@ app.MapPost("/api/ledger/prices", async (
 
 app.MapPost("/api/ledger/closings", async (
     CreateClosingDto dto,
+    ClaimsPrincipal user,
     IHuevoControlDbContext db,
     CancellationToken ct) =>
 {
-    var deliveries = await db.Deliveries.AsNoTracking().Where(d => d.VendorId == dto.VendorId).ToListAsync(ct);
-    var payments = await db.Payments.AsNoTracking().Where(p => p.VendorId == dto.VendorId).ToListAsync(ct);
-    var losses = await db.DailyLosses.AsNoTracking().Where(l => l.VendorId == dto.VendorId).ToListAsync(ct);
-    var incidents = await db.MoneyIncidents.AsNoTracking().Where(i => i.VendorId == dto.VendorId).ToListAsync(ct);
+    var vendor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == dto.VendorId && u.Role == UserRole.Vendedor, ct);
+    if (vendor is null) return Results.BadRequest("Vendedor inválido.");
+    var deliveries = await db.Deliveries.AsNoTracking().Where(d => d.VendorId == vendor.Id).ToListAsync(ct);
+    var payments = await db.Payments.AsNoTracking().Where(p => p.VendorId == vendor.Id).ToListAsync(ct);
+    var losses = await db.DailyLosses.AsNoTracking().Where(l => l.VendorId == vendor.Id).ToListAsync(ct);
+    var incidents = await db.MoneyIncidents.AsNoTracking().Where(i => i.VendorId == vendor.Id).ToListAsync(ct);
 
     var calc = DeliveryCalculator.CalculateClosing(deliveries, payments, losses, incidents, dto.ActualCashHandedInCentavos);
     var closing = new CashClosing
     {
         Id = Guid.NewGuid().ToString("N"),
         VendorId = dto.VendorId,
-        VendorName = dto.VendorName,
+        VendorName = vendor.Name,
         DateYmd = dto.DateYmd,
         SoldCentavos = calc.SoldCentavos,
         CashCollectedCentavos = calc.CashCollectedCentavos,
@@ -105,7 +112,7 @@ app.MapPost("/api/ledger/closings", async (
         ExpectedCashToDeliverCentavos = calc.ExpectedCashToDeliverCentavos,
         ActualCashHandedInCentavos = calc.ActualCashHandedInCentavos,
         UnexplainedDifferenceCentavos = calc.UnexplainedDifferenceCentavos,
-        ClosedByUserId = dto.OwnerId
+        ClosedByUserId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty
     };
     db.CashClosings.Add(closing);
     await db.SaveChangesAsync(ct);
@@ -114,5 +121,5 @@ app.MapPost("/api/ledger/closings", async (
 
 app.Run();
 
-public sealed record PublishPriceDto(string DateYmd, long PriceCentavosPerKg, string OwnerId, string OwnerName);
-public sealed record CreateClosingDto(string VendorId, string VendorName, string DateYmd, long ActualCashHandedInCentavos, string OwnerId);
+public sealed record PublishPriceDto(string DateYmd, long PriceCentavosPerKg);
+public sealed record CreateClosingDto(string VendorId, string VendorName, string DateYmd, long ActualCashHandedInCentavos);

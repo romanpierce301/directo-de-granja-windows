@@ -4,16 +4,14 @@ import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 import type { UserRole } from '../shared/domain.ts';
 
-// Ephemeral CSPRNG fallback for local dev/preview when env var is not injected
-const DEV_EPHEMERAL_JWT = crypto.randomBytes(32).toString('hex');
-const DEV_EPHEMERAL_AES = crypto.randomBytes(32);
+const ENCRYPTED_VALUE_PREFIX = 'enc:v1:';
 
 function getJwtSecret(): string {
   const envSecret = process.env.JWT_SECRET;
   if (envSecret && envSecret.length >= 32) {
     return envSecret;
   }
-  return DEV_EPHEMERAL_JWT;
+  throw new Error('JWT_SECRET debe configurarse con al menos 32 caracteres aleatorios.');
 }
 
 function getAesKey(): Buffer {
@@ -21,10 +19,14 @@ function getAesKey(): Buffer {
   if (envKey && /^[0-9a-fA-F]{64}$/.test(envKey)) {
     return Buffer.from(envKey, 'hex');
   }
-  if (envKey && envKey.length >= 32) {
-    return crypto.createHash('sha256').update(envKey).digest();
-  }
-  return DEV_EPHEMERAL_AES;
+  throw new Error('AES_ENCRYPTION_KEY debe contener exactamente 64 caracteres hexadecimales aleatorios.');
+}
+
+export function validateSecurityConfiguration(): void {
+  // Fail at startup rather than using unstable keys that invalidate sessions or make persisted
+  // encrypted values unreadable after a restart.
+  getJwtSecret();
+  getAesKey();
 }
 
 export interface JwtClaims {
@@ -77,6 +79,7 @@ export function encryptSensitive(plaintext: string): string {
 }
 
 export function decryptSensitive(payload: string): string {
+  if (payload.startsWith(ENCRYPTED_VALUE_PREFIX)) payload = payload.slice(ENCRYPTED_VALUE_PREFIX.length);
   const parts = payload.split(':');
   if (parts.length !== 3) {
     throw new Error('Formato de texto cifrado inválido.');
@@ -90,6 +93,14 @@ export function decryptSensitive(payload: string): string {
     decipher.final(),
   ]);
   return decrypted.toString('utf8');
+}
+
+export function protectSensitive(plaintext: string): string {
+  return `${ENCRYPTED_VALUE_PREFIX}${encryptSensitive(plaintext)}`;
+}
+
+export function revealSensitive(value: string): string {
+  return value.startsWith(ENCRYPTED_VALUE_PREFIX) ? decryptSensitive(value) : value;
 }
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {

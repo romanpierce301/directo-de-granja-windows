@@ -7,8 +7,8 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [email, setEmail] = useState('dueno@directodegranja.mx');
-  const [password, setPassword] = useState('Granja2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +26,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0d14] text-[#e1e2ec] p-6">
+    <div className="min-h-screen flex items-center justify-center bg-[#090312] text-[#F4EFFF] p-6">
       <div className="glass-panel w-full max-w-md rounded-lg p-7">
         <div className="flex items-center gap-4">
           <div className="w-24 h-16 rounded-lg overflow-hidden bg-[#0b0e15] border border-white/15 shrink-0 flex items-center justify-center shadow">
@@ -39,14 +39,14 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Directo de Granja</h1>
-            <p className="text-xs text-[#71ffe5]">«Te faltan huevos a nosotros nos sobran»</p>
-            <p className="mt-1 text-xs text-[#8d90a2]">Aplicación de Windows · Acceso exclusivo para el dueño</p>
+            <p className="text-xs text-[#C084FC]">«Te faltan huevos a nosotros nos sobran»</p>
+            <p className="mt-1 text-xs text-[#9E8FB2]">Aplicación de Windows · Acceso exclusivo para el dueño</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#c3c5d8] mb-1.5">
+            <label className="block text-xs font-medium text-[#9E8FB2] mb-1.5">
               Correo de cuenta (Rol Dueño)
             </label>
             <input
@@ -55,12 +55,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input-recessed w-full rounded px-3 py-2 text-sm"
-              placeholder="dueno@directodegranja.mx"
+              placeholder="correo@ejemplo.com"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[#c3c5d8] mb-1.5">
+            <label className="block text-xs font-medium text-[#9E8FB2] mb-1.5">
               Contraseña cifrada
             </label>
             <div className="relative">
@@ -72,12 +72,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 className="input-recessed w-full rounded px-3 py-2 pr-9 text-sm"
                 placeholder="••••••••"
               />
-              <Lock className="w-4 h-4 text-[#8d90a2] absolute right-3 top-2.5" />
+              <Lock className="w-4 h-4 text-[#9E8FB2] absolute right-3 top-2.5" />
             </div>
           </div>
 
           {error && (
-            <div className="rounded border border-[#D64545]/60 bg-[#D64545]/15 px-3 py-2 text-xs text-[#ffb4ab]">
+            <div className="rounded border border-[#F43F5E]/60 bg-[#F43F5E]/15 px-3 py-2 text-xs text-[#FECDD3]">
               {error}
             </div>
           )}
@@ -96,8 +96,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         </form>
 
-        <div className="mt-5 pt-4 border-t border-white/10 flex items-start gap-2.5 text-xs text-[#8d90a2]">
-          <ShieldCheck className="w-4 h-4 text-[#00f076] shrink-0 mt-0.5" />
+        <div className="mt-5 pt-4 border-t border-white/10 flex items-start gap-2.5 text-xs text-[#9E8FB2]">
+          <ShieldCheck className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
           <p>
             Sesión protegida con JWT HS256 (expira en 8 horas) y contraseñas cifradas con bcrypt. No se guardan contraseñas en el equipo.
           </p>

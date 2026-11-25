@@ -94,6 +94,13 @@ export class ApiClient {
     });
   }
 
+  public async reviewDelivery(deliveryId: string, decision: 'aprobar' | 'rechazar', note = '') {
+    return this.request(`/api/deliveries/${deliveryId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, note }),
+    });
+  }
+
   public async logReprint(deliveryId: string) {
     return this.request(`/api/deliveries/${deliveryId}/reprint`, { method: 'POST' });
   }
@@ -108,6 +115,8 @@ export class ApiClient {
     phone: string;
     address: string;
     notes: string;
+    specialPricePesosPerKg?: number | null;
+    creditTermDays?: number | null;
   }) {
     return this.request('/api/customers', {
       method: 'POST',

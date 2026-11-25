@@ -81,10 +81,10 @@ export function GuidedTour({ onSelectTab, onClose }: GuidedTourProps) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 w-[390px] max-w-[calc(100vw-2rem)] glass-panel rounded-lg p-5 border border-[#1d63ff]/50 shadow-2xl">
+    <div className="fixed bottom-5 right-5 z-40 w-[390px] max-w-[calc(100vw-2rem)] glass-panel rounded-lg p-5 border border-[#8A2BE2]/50 shadow-2xl">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-mono text-[#71ffe5]">
+          <p className="text-xs font-mono text-[#C084FC]">
             Recorrido guiado · Paso {stepIndex + 1} de {TOUR_STEPS.length}
           </p>
           <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
@@ -93,14 +93,14 @@ export function GuidedTour({ onSelectTab, onClose }: GuidedTourProps) {
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-white/10 text-slate-500 dark:text-[#8d90a2]"
+          className="p-1 rounded hover:bg-white/10 text-slate-500 dark:text-[#9E8FB2]"
           aria-label="Cerrar recorrido"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <p className="mt-2.5 text-sm leading-relaxed text-slate-600 dark:text-[#c3c5d8]">
+      <p className="mt-2.5 text-sm leading-relaxed text-slate-600 dark:text-[#9E8FB2]">
         {current.description}
       </p>
 
