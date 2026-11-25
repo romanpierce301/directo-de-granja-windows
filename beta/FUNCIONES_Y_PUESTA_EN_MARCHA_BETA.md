@@ -57,9 +57,8 @@
 1. Instala Node.js LTS en la PC.
 2. Copia el repositorio Windows completo, no solo el ZIP de `dist`.
 3. En la carpeta del proyecto ejecuta `npm install`.
-4. Arranca el servicio/API con el comando definido en el proyecto (`npm run server`, si está disponible en tu copia).
-5. En otra consola ejecuta `npm run dev -- --host 0.0.0.0`.
-6. Abre la dirección que muestre Vite en el navegador de la PC.
+4. Ejecuta `npm run dev` en la carpeta del proyecto. Este comando levanta la API, WebSocket y la interfaz en el puerto 3000.
+5. Abre `http://localhost:3000` en el navegador de la PC.
 
 El ZIP compilado solo contiene la interfaz; no sustituye el servicio `server.ts`.
 
