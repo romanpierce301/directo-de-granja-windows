@@ -11,18 +11,26 @@ import {
   calculateBrandInventory,
   calculateCustomerLedger,
   calculateDeliveryTotals,
+  calculateSugarLineSubtotalCentavos,
   calculateVendorClosing,
+  deductCartonTareFromPerBoxWeights,
   formatCurrencyFromCentavos,
   formatFolio,
   formatKgFromGrams,
   getMexicoCityYmd,
+  isValidHalfUnitCount,
   normalizeBrandName,
   normalizeCustomerName,
   normalizePhone,
+  normalizeProductKey,
+  roundHalfUnits,
   sanitizeImportedCell,
   splitTotalGramsIntoBoxes,
+  splitTotalGramsIntoHalfAwareBoxes,
   validateBodegaSaleStock,
   validatePaymentAmount,
+  type BodegaProductType,
+  type BodegaSaleItem,
   type Customer,
   type Delivery,
   type DeliveryBox,
@@ -136,9 +144,13 @@ async function bootstrap() {
   // Health & real-time telemetry endpoint
   app.get('/api/health', (_req, res) => {
     const db = store.getDb();
-    res.json({
-      status: 'healthy',
+    const sqliteHealthy = store.pingSqlite();
+    const storageInfo = store.getStorageInfo();
+    res.status(sqliteHealthy ? 200 : 503).json({
+      status: sqliteHealthy ? 'healthy' : 'degraded',
       service: 'Directo de Granja — Te faltan huevos a nosotros nos sobran',
+      storageEngine: storageInfo.engine,
+      storage: storageInfo,
       timestampUtc: new Date().toISOString(),
       activeWsClients: wsClients.size,
       metrics: {
@@ -930,7 +942,7 @@ async function bootstrap() {
     res.json({ ok: true });
   });
 
-  // Bodega: Register Farm -> Warehouse Torton / Trailer Arrival
+  // Bodega: Register Farm -> Warehouse Torton / Trailer Arrival (Eggs & Sugar Sacks)
   app.post('/api/bodega/shipments', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const vehicleType = req.body?.vehicleType === 'trailer' ? ('trailer' as const) : ('torton' as const);
     const referenceCode = sanitizePlainText(req.body?.referenceCode, 80);
@@ -940,7 +952,7 @@ async function bootstrap() {
     const rawLines = Array.isArray(req.body?.lines) ? req.body.lines : [];
 
     if (rawLines.length === 0 || rawLines.length > 50) {
-      res.status(400).json({ error: 'Debe agregar entre 1 y 50 lotes de marca de huevo al viaje.' });
+      res.status(400).json({ error: 'Debe agregar entre 1 y 50 lotes de producto al viaje.' });
       return;
     }
 
@@ -948,24 +960,36 @@ async function bootstrap() {
     const lines: WarehouseShipmentLine[] = [];
 
     for (const raw of rawLines) {
+      const productType: BodegaProductType = raw?.productType === 'azucar' ? 'azucar' : 'huevo';
       const brandName = sanitizePlainText(raw?.brandName, 80);
-      const brandKey = normalizeBrandName(brandName);
-      const boxesCount = Number(raw?.boxesCount);
-      const totalKg = Number(raw?.totalKg);
-      const totalGrams = Math.round(totalKg * 1000);
+      const brandKey = normalizeProductKey(brandName, productType);
+      const boxesCount = roundHalfUnits(Number(raw?.boxesCount));
+      const weightPerBultoKg = Number(raw?.weightPerBultoKg);
+      const totalKgInput = Number(raw?.totalKg);
+      const computedTotalKg =
+        productType === 'azucar' && Number.isFinite(weightPerBultoKg) && weightPerBultoKg > 0
+          ? boxesCount * weightPerBultoKg
+          : totalKgInput;
+      const totalGrams = Math.round(computedTotalKg * 1000);
+
+      const qtyValid =
+        productType === 'azucar'
+          ? Number.isInteger(boxesCount) && boxesCount > 0 && boxesCount <= 50_000
+          : isValidHalfUnitCount(boxesCount) && boxesCount <= 50_000;
 
       if (
         !brandName ||
         !brandKey ||
-        !Number.isInteger(boxesCount) ||
-        boxesCount <= 0 ||
-        boxesCount > 50_000 ||
-        !Number.isFinite(totalKg) ||
+        !qtyValid ||
+        !Number.isFinite(computedTotalKg) ||
         totalGrams <= 0 ||
         totalGrams > 50_000_000
       ) {
         res.status(400).json({
-          error: 'Cada lote debe indicar marca válida, cajas enteras (> 0) y peso total en kg (> 0).',
+          error:
+            productType === 'azucar'
+              ? 'Cada lote de azúcar debe indicar producto válido, bultos enteros (> 0) y peso (> 0).'
+              : 'Cada lote de huevo debe indicar marca válida, cajas (> 0 en múltiplos de 0.5) y peso total en kg (> 0).',
         });
         return;
       }
@@ -973,6 +997,7 @@ async function bootstrap() {
       lines.push({
         id: `shl-${crypto.randomUUID()}`,
         shipmentId,
+        productType,
         brandKey,
         brandName,
         boxesCount,
@@ -1001,7 +1026,11 @@ async function bootstrap() {
 
     db.warehouseShipments.unshift(shipment);
     const summaryText = lines
-      .map((l) => `${l.boxesCount} cajas ${l.brandName} (${formatKgFromGrams(l.totalGrams)})`)
+      .map((l) =>
+        l.productType === 'azucar'
+          ? `${l.boxesCount} bultos ${l.brandName} (${formatKgFromGrams(l.totalGrams)})`
+          : `${l.boxesCount} cajas ${l.brandName} (${formatKgFromGrams(l.totalGrams)})`
+      )
       .join(', ');
     store.addAudit(
       'warehouse_shipments',
@@ -1019,7 +1048,7 @@ async function bootstrap() {
     });
   });
 
-  // Bodega: Direct Warehouse Egg Sale with Atomic Brand Inventory Deduction
+  // Bodega: Direct Multi-Brand Egg & Sugar Warehouse Sale with Atomic Inventory Deduction
   app.post('/api/bodega/sales', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
     const todayYmd = getMexicoCityYmd();
@@ -1028,15 +1057,6 @@ async function bootstrap() {
     const customerIdInput = sanitizePlainText(req.body?.customerId, 80);
     const newCustomerName = sanitizePlainText(req.body?.newCustomerName, 120);
     const newCustomerPhone = normalizePhone(sanitizePlainText(req.body?.newCustomerPhone, 20));
-    const brandInput = sanitizePlainText(req.body?.brandName, 80);
-    const boxesCount = Number(req.body?.boxesCount);
-    const weighMode = req.body?.weighMode === 'cajas' ? ('cajas' as const) : ('total' as const);
-    const isSpecialPrice = Boolean(req.body?.isSpecialPrice);
-
-    if (!brandInput) {
-      res.status(400).json({ error: 'Seleccione la marca de huevo a vender.' });
-      return;
-    }
 
     // 1. Validate customer (existing or quick walk-in creation)
     let customer = customerIdInput
@@ -1070,75 +1090,317 @@ async function bootstrap() {
       return;
     }
 
-    if (!Number.isInteger(boxesCount) || boxesCount <= 0 || boxesCount > 5000) {
-      res.status(400).json({ error: 'La cantidad de cajas por venta debe estar entre 1 y 5,000.' });
+    // Support both multi-item `items` array and legacy single-item payload
+    const rawItems: Record<string, unknown>[] = Array.isArray(req.body?.items)
+      ? req.body.items
+      : [
+          {
+            productType: 'huevo',
+            brandName: req.body?.brandName,
+            fullBoxes: req.body?.boxesCount,
+            halfBoxes: 0,
+            weighMode: req.body?.weighMode,
+            totalKg: req.body?.totalKg,
+            boxesGrams: req.body?.boxesGrams,
+            pricePesosPerKg: req.body?.pricePesosPerKg,
+            isSpecialPrice: req.body?.isSpecialPrice,
+          },
+        ];
+
+    if (rawItems.length === 0 || rawItems.length > 30) {
+      res.status(400).json({ error: 'Agregue entre 1 y 30 conceptos de producto en la venta.' });
       return;
     }
 
-    // 2. Validate available inventory for requested brand BEFORE mutating anything
     const inventory = calculateBrandInventory(db.warehouseShipments, db.deliveries, db.deliveryBoxes);
-    let matchedStock;
-    try {
-      matchedStock = validateBodegaSaleStock(inventory, brandInput, boxesCount);
-    } catch (err) {
-      res.status(409).json({ error: (err as Error).message });
-      return;
-    }
+    const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
 
-    // 3. Build integer grams per box
-    let boxesGrams: number[] = [];
-    if (weighMode === 'cajas') {
-      const rawBoxes = Array.isArray(req.body?.boxesGrams) ? req.body.boxesGrams : [];
-      if (rawBoxes.length !== boxesCount || rawBoxes.length > 500) {
+    const requestedQtyByKey = new Map<
+      string,
+      { productType: BodegaProductType; brandName: string; qty: number }
+    >();
+    const builtItems: BodegaSaleItem[] = [];
+    const allBoxesGrams: number[] = [];
+
+    for (let idx = 0; idx < rawItems.length; idx++) {
+      const raw = rawItems[idx] ?? {};
+      const productType: BodegaProductType = raw.productType === 'azucar' ? 'azucar' : 'huevo';
+      const brandInput = sanitizePlainText(raw.brandName, 80);
+
+      if (!brandInput) {
         res.status(400).json({
-          error: `Debe capturar exactamente ${boxesCount} peso(s) individuales de caja.`,
+          error: `Concepto #${idx + 1}: seleccione la marca o producto a vender.`,
         });
         return;
       }
-      boxesGrams = rawBoxes.map((g: unknown) => Math.round(Number(g)));
-      if (boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)) {
-        res.status(400).json({ error: 'Cada caja debe tener un peso válido mayor a 0.' });
-        return;
+
+      if (productType === 'azucar') {
+        const bultosCount = Number(raw.bultosCount ?? raw.fullBoxes ?? raw.boxesCount);
+        const weightPerBultoKg = Number(raw.weightPerBultoKg);
+        const pricePerBultoPesos = Number(raw.pricePerBultoPesos);
+        const isSpecialPrice = Boolean(raw.isSpecialPrice);
+
+        if (!Number.isInteger(bultosCount) || bultosCount <= 0 || bultosCount > 5000) {
+          res.status(400).json({
+            error: `Azúcar #${idx + 1}: la cantidad de bultos debe ser un entero entre 1 y 5,000.`,
+          });
+          return;
+        }
+        const weightPerBultoGrams = Math.round(weightPerBultoKg * 1000);
+        if (
+          !Number.isFinite(weightPerBultoKg) ||
+          weightPerBultoGrams <= 0 ||
+          weightPerBultoGrams > 200_000
+        ) {
+          res.status(400).json({
+            error: `Azúcar #${idx + 1}: ingrese el peso por bulto en kg mayor a 0.`,
+          });
+          return;
+        }
+        const pricePerBultoCentavos = Math.round(pricePerBultoPesos * 100);
+        if (
+          !Number.isFinite(pricePerBultoPesos) ||
+          !Number.isInteger(pricePerBultoCentavos) ||
+          pricePerBultoCentavos <= 0 ||
+          pricePerBultoCentavos > 10_000_000
+        ) {
+          res.status(400).json({
+            error: `Azúcar #${idx + 1}: ingrese el precio por bulto mayor a $0.`,
+          });
+          return;
+        }
+
+        let matchedStock;
+        try {
+          matchedStock = validateBodegaSaleStock(inventory, brandInput, bultosCount, 'azucar');
+        } catch (err) {
+          res.status(409).json({ error: (err as Error).message });
+          return;
+        }
+
+        const prevReq = requestedQtyByKey.get(matchedStock.brandKey);
+        const combinedQty = (prevReq?.qty ?? 0) + bultosCount;
+        requestedQtyByKey.set(matchedStock.brandKey, {
+          productType: 'azucar',
+          brandName: matchedStock.brandName,
+          qty: combinedQty,
+        });
+
+        const totalGrams = bultosCount * weightPerBultoGrams;
+        const subtotalCentavos = calculateSugarLineSubtotalCentavos(
+          bultosCount,
+          pricePerBultoCentavos
+        );
+        const itemBoxesGrams =
+          bultosCount <= 200
+            ? Array.from({ length: bultosCount }, () => weightPerBultoGrams)
+            : splitTotalGramsIntoBoxes(totalGrams, 200);
+
+        allBoxesGrams.push(...itemBoxesGrams);
+        builtItems.push({
+          id: `bsi-${crypto.randomUUID()}`,
+          productType: 'azucar',
+          brandKey: matchedStock.brandKey,
+          brandName: matchedStock.brandName,
+          fullBoxes: bultosCount,
+          halfBoxes: 0,
+          quantity: bultosCount,
+          tareGrams: 0,
+          totalGrams,
+          unitPriceCentavos: pricePerBultoCentavos,
+          isSpecialPrice,
+          subtotalCentavos,
+          boxesGrams: itemBoxesGrams,
+        });
+      } else {
+        const fullBoxes = Number(raw.fullBoxes ?? raw.boxesCount ?? 0);
+        const halfBoxes = Number(raw.halfBoxes ?? 0);
+        const weighMode = raw.weighMode === 'cajas' ? ('cajas' as const) : ('total' as const);
+        const isSpecialPrice = Boolean(raw.isSpecialPrice);
+
+        if (
+          !Number.isInteger(fullBoxes) ||
+          fullBoxes < 0 ||
+          !Number.isInteger(halfBoxes) ||
+          halfBoxes < 0 ||
+          fullBoxes + halfBoxes <= 0 ||
+          fullBoxes + halfBoxes > 5000
+        ) {
+          res.status(400).json({
+            error: `Huevo #${idx + 1}: indique cajas completas o medias cajas válidas (> 0).`,
+          });
+          return;
+        }
+
+        const quantity = roundHalfUnits(fullBoxes + halfBoxes * 0.5);
+        let matchedStock;
+        try {
+          matchedStock = validateBodegaSaleStock(inventory, brandInput, quantity, 'huevo');
+        } catch (err) {
+          res.status(409).json({ error: (err as Error).message });
+          return;
+        }
+
+        const prevReq = requestedQtyByKey.get(matchedStock.brandKey);
+        const combinedQty = roundHalfUnits((prevReq?.qty ?? 0) + quantity);
+        requestedQtyByKey.set(matchedStock.brandKey, {
+          productType: 'huevo',
+          brandName: matchedStock.brandName,
+          qty: combinedQty,
+        });
+
+        let netBoxesGrams: number[] = [];
+        let tareGrams = 0;
+
+        if (weighMode === 'cajas') {
+          if (
+            Array.isArray(raw.fullBoxesGrossGrams) ||
+            Array.isArray(raw.halfBoxesGrossGrams)
+          ) {
+            const rawFull = Array.isArray(raw.fullBoxesGrossGrams)
+              ? raw.fullBoxesGrossGrams
+              : [];
+            const rawHalf = Array.isArray(raw.halfBoxesGrossGrams)
+              ? raw.halfBoxesGrossGrams
+              : [];
+            if (
+              rawFull.length !== fullBoxes ||
+              rawHalf.length !== halfBoxes ||
+              rawFull.length + rawHalf.length > 500
+            ) {
+              res.status(400).json({
+                error: `Huevo #${idx + 1}: debe capturar los pesos brutos de ${fullBoxes} caja(s) y ${halfBoxes} media(s) caja(s).`,
+              });
+              return;
+            }
+            const grossFullGrams = rawFull.map((g: unknown) => Math.round(Number(g)));
+            const grossHalfGrams = rawHalf.map((g: unknown) => Math.round(Number(g)));
+            if (
+              grossFullGrams.some((g) => !Number.isInteger(g) || g > 200_000) ||
+              grossHalfGrams.some((g) => !Number.isInteger(g) || g > 200_000)
+            ) {
+              res.status(400).json({
+                error: `Huevo #${idx + 1}: verifique que los pesos capturados sean válidos.`,
+              });
+              return;
+            }
+            try {
+              const tareResult = deductCartonTareFromPerBoxWeights(grossFullGrams, grossHalfGrams);
+              netBoxesGrams = tareResult.netBoxesGrams;
+              tareGrams = tareResult.tareGrams;
+            } catch (err) {
+              res.status(400).json({ error: (err as Error).message });
+              return;
+            }
+          } else {
+            // Backward-compatible pre-netted boxesGrams field
+            const rawBoxes = Array.isArray(raw.boxesGrams) ? raw.boxesGrams : [];
+            if (rawBoxes.length !== fullBoxes + halfBoxes || rawBoxes.length > 500) {
+              res.status(400).json({
+                error: `Debe capturar exactamente ${fullBoxes + halfBoxes} peso(s) individuales de caja.`,
+              });
+              return;
+            }
+            netBoxesGrams = rawBoxes.map((g: unknown) => Math.round(Number(g)));
+            if (netBoxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)) {
+              res.status(400).json({ error: 'Cada caja debe tener un peso válido mayor a 0.' });
+              return;
+            }
+          }
+        } else {
+          const totalKg = Number(raw.totalKg);
+          const totalGrams = Math.round(totalKg * 1000);
+          if (!Number.isFinite(totalKg) || totalGrams <= 0 || totalGrams > 50_000_000) {
+            res.status(400).json({
+              error: `Huevo #${idx + 1}: ingrese el peso total en báscula (kg) mayor a 0.`,
+            });
+            return;
+          }
+          try {
+            netBoxesGrams = splitTotalGramsIntoHalfAwareBoxes(totalGrams, fullBoxes, halfBoxes);
+          } catch (err) {
+            res.status(400).json({ error: (err as Error).message });
+            return;
+          }
+        }
+
+        const requestedPricePesos = Number(raw.pricePesosPerKg);
+        let priceCentavosPerKg: number;
+        if (isSpecialPrice || !latestPrice) {
+          priceCentavosPerKg = Math.round(requestedPricePesos * 100);
+        } else {
+          priceCentavosPerKg =
+            Number.isFinite(requestedPricePesos) && requestedPricePesos > 0
+              ? Math.round(requestedPricePesos * 100)
+              : latestPrice.priceCentavosPerKg;
+        }
+
+        if (
+          !Number.isInteger(priceCentavosPerKg) ||
+          priceCentavosPerKg <= 0 ||
+          priceCentavosPerKg > 50_000
+        ) {
+          res.status(400).json({
+            error: `Huevo #${idx + 1}: el precio por kilo debe ser mayor a $0 (publique el precio del día o capture uno válido).`,
+          });
+          return;
+        }
+
+        let calc;
+        try {
+          calc = calculateDeliveryTotals(netBoxesGrams, priceCentavosPerKg);
+        } catch (err) {
+          res.status(400).json({ error: (err as Error).message });
+          return;
+        }
+
+        allBoxesGrams.push(...netBoxesGrams);
+        builtItems.push({
+          id: `bsi-${crypto.randomUUID()}`,
+          productType: 'huevo',
+          brandKey: matchedStock.brandKey,
+          brandName: matchedStock.brandName,
+          fullBoxes,
+          halfBoxes,
+          quantity,
+          weighMode,
+          tareGrams,
+          totalGrams: calc.totalGrams,
+          unitPriceCentavos: priceCentavosPerKg,
+          isSpecialPrice,
+          subtotalCentavos: calc.totalToChargeCentavos,
+          calculatedExactLabel: calc.calculatedExactLabel,
+          boxesGrams: netBoxesGrams,
+        });
       }
-    } else {
-      const totalKg = Number(req.body?.totalKg);
-      const totalGrams = Math.round(totalKg * 1000);
-      if (!Number.isFinite(totalKg) || totalGrams <= 0 || totalGrams > 50_000_000) {
-        res.status(400).json({ error: 'Ingrese el peso total en báscula (kg) mayor a 0.' });
-        return;
-      }
+    }
+
+    // Verify aggregated stock across all lines in this ticket (prevents splitting same brand to exceed stock)
+    for (const reqSum of requestedQtyByKey.values()) {
       try {
-        boxesGrams = splitTotalGramsIntoBoxes(totalGrams, boxesCount);
+        validateBodegaSaleStock(inventory, reqSum.brandName, reqSum.qty, reqSum.productType);
       } catch (err) {
-        res.status(400).json({ error: (err as Error).message });
+        res.status(409).json({ error: (err as Error).message });
         return;
       }
     }
 
-    // 4. Resolve price per kg
-    const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
-    const requestedPricePesos = Number(req.body?.pricePesosPerKg);
-    let priceCentavosPerKg: number;
-    if (isSpecialPrice || !latestPrice) {
-      priceCentavosPerKg = Math.round(requestedPricePesos * 100);
-    } else {
-      priceCentavosPerKg = Number.isFinite(requestedPricePesos) && requestedPricePesos > 0
-        ? Math.round(requestedPricePesos * 100)
-        : latestPrice.priceCentavosPerKg;
-    }
-
-    if (!Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0 || priceCentavosPerKg > 50_000) {
-      res.status(400).json({ error: 'El precio por kilo debe ser mayor a $0 (publique el precio del día o capture uno válido).' });
+    if (allBoxesGrams.length > 2500) {
+      res.status(400).json({ error: 'El ticket excede el máximo de 2,500 bultos/cajas por operación.' });
       return;
     }
 
-    let calc;
-    try {
-      calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
-      return;
-    }
+    const totalGrams = builtItems.reduce((acc, it) => acc + it.totalGrams, 0);
+    const totalToChargeCentavos = builtItems.reduce((acc, it) => acc + it.subtotalCentavos, 0);
+    const totalQuantity = roundHalfUnits(builtItems.reduce((acc, it) => acc + it.quantity, 0));
+    const singleEggItem =
+      builtItems.length === 1 && builtItems[0].productType === 'huevo' ? builtItems[0] : null;
+    const effectivePriceCentavosPerKg = singleEggItem
+      ? singleEggItem.unitPriceCentavos
+      : totalGrams > 0
+      ? Math.max(1, Math.round((totalToChargeCentavos * 1000) / totalGrams))
+      : 100;
+    const anySpecialPrice = builtItems.some((it) => it.isSpecialPrice);
 
     // 5. Optional initial payment validation
     const rawPaid = req.body?.paidPesos;
@@ -1151,7 +1413,7 @@ async function bootstrap() {
     const paidCentavos = Math.round(paidPesos * 100);
     if (paidCentavos > 0) {
       try {
-        validatePaymentAmount(paidCentavos, calc.totalToChargeCentavos);
+        validatePaymentAmount(paidCentavos, totalToChargeCentavos);
       } catch (err) {
         res.status(400).json({ error: (err as Error).message });
         return;
@@ -1161,6 +1423,14 @@ async function bootstrap() {
     // 6. Commit Bodega Sale & Inventory Deduction atomically
     const folioInfo = store.reserveNextFolio('BD');
     const deliveryId = `del-bd-${crypto.randomUUID()}`;
+    const summaryLabel = builtItems
+      .map((it) =>
+        it.productType === 'azucar'
+          ? `${it.brandName} (${it.quantity} bultos)`
+          : `${it.brandName} (${it.quantity} cjs)`
+      )
+      .join(', ');
+
     const delivery: Delivery = {
       id: deliveryId,
       vendorId: req.user!.sub,
@@ -1174,21 +1444,22 @@ async function bootstrap() {
       customerId: customer.id,
       customerName: customer.businessName,
       createdAtUtc: nowUtc,
-      priceCentavosPerKg,
-      isSpecialPrice,
-      totalGrams: calc.totalGrams,
-      calculatedTotalExactMilliCentavos: calc.calculatedExactMilliCentavos,
-      totalToChargeCentavos: calc.totalToChargeCentavos,
+      priceCentavosPerKg: effectivePriceCentavosPerKg,
+      isSpecialPrice: anySpecialPrice,
+      totalGrams,
+      calculatedTotalExactMilliCentavos: totalToChargeCentavos * 1000,
+      totalToChargeCentavos,
       status: 'vigente',
       cancellationReason: null,
       syncedAtUtc: nowUtc,
       sourceType: 'bodega',
-      brandKey: matchedStock.brandKey,
-      brandName: matchedStock.brandName,
-      boxesCount,
+      brandKey: builtItems.length === 1 ? builtItems[0].brandKey : 'multi',
+      brandName: builtItems.length === 1 ? builtItems[0].brandName : summaryLabel,
+      boxesCount: totalQuantity,
+      saleItems: builtItems,
     };
 
-    const createdBoxes: DeliveryBox[] = boxesGrams.map((wg, i) => ({
+    const createdBoxes: DeliveryBox[] = allBoxesGrams.map((wg, i) => ({
       id: `box-${crypto.randomUUID()}`,
       deliveryId,
       position: i + 1,
@@ -1210,7 +1481,7 @@ async function bootstrap() {
         method,
         status: method === 'efectivo' ? 'verificado' : 'por_verificar',
         createdAtUtc: nowUtc,
-        note: `Pago en bodega · ${boxesCount} cajas ${matchedStock.brandName}`,
+        note: `Pago en bodega · ${summaryLabel}`,
       };
       db.payments.push(createdPayment);
     }
@@ -1219,7 +1490,7 @@ async function bootstrap() {
       id: `evt-${crypto.randomUUID()}`,
       deliveryId,
       eventType: 'creacion',
-      detail: `Venta directa en bodega ${delivery.folioFormatted}: ${boxesCount} cajas de ${matchedStock.brandName} (${formatKgFromGrams(calc.totalGrams)})`,
+      detail: `Venta directa en bodega ${delivery.folioFormatted}: ${summaryLabel} (${formatKgFromGrams(totalGrams)})`,
       actorUserId: req.user!.sub,
       actorName: req.user!.name,
       deviceId: 'win-owner-desktop',
@@ -1231,13 +1502,13 @@ async function bootstrap() {
       'deliveries',
       deliveryId,
       'VENTA_BODEGA',
-      `${delivery.folioFormatted} · ${customer.businessName}: -${boxesCount} cajas ${matchedStock.brandName} (${formatKgFromGrams(calc.totalGrams)}) = ${formatCurrencyFromCentavos(calc.totalToChargeCentavos)}`,
+      `${delivery.folioFormatted} · ${customer.businessName}: ${summaryLabel} (${formatKgFromGrams(totalGrams)}) = ${formatCurrencyFromCentavos(totalToChargeCentavos)}`,
       req.user!.sub,
       req.user!.name
     );
 
     store.persist();
-    broadcastEvent('bodega:updated', { deliveryId, brandKey: matchedStock.brandKey });
+    broadcastEvent('bodega:updated', { deliveryId, itemsCount: builtItems.length });
     broadcastEvent('delivery:synced', { deliveryId, folio: delivery.folioFormatted });
 
     const nextInventory = calculateBrandInventory(

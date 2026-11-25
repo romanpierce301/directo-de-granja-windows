@@ -1,12 +1,18 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   calculateBrandInventory,
   calculateCustomerLedger,
   calculateDeliveryTotals,
+  calculateSugarLineSubtotalCentavos,
   calculateVendorClosing,
+  deductCartonTareFromPerBoxWeights,
   escapeExcelFormulaInjection,
   normalizeCustomerName,
   splitTotalGramsIntoBoxes,
+  splitTotalGramsIntoHalfAwareBoxes,
   validateBodegaSaleStock,
   validatePaymentAmount,
   type DailyLoss,
@@ -25,6 +31,7 @@ import {
   verifyJwt,
   verifyPassword,
 } from '../server/security.ts';
+import { createLedgerStore } from '../server/store.ts';
 
 describe('Casos de aceptación C1-C6 y R1-R5 (Documento Maestro)', () => {
   it('C1 & R1: 25.35 + 24.45 + 25.12 + 22.78 + 22.90 kg a $37 => 120.60 kg, $4,462.20 -> $4,462', () => {
@@ -360,5 +367,260 @@ describe('Bodega: Tortón/Tráiler, Inventario por Marca y Descuento por Venta D
     expect(enerRestored.boxesSold).toBe(0);
     expect(enerRestored.boxesAvailable).toBe(150);
     expect(enerRestored.gramsAvailable).toBe(3_675_000);
+  });
+});
+
+describe('Almacenamiento principal en SQLite (WAL, persistencia tras reinicio y parametrización)', () => {
+  it('Persiste clientes, entradas de camión, entregas y folios en SQLite WAL y recarga tras reiniciar', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-sqlite-test-'));
+    const dbPath = path.join(tmpDir, 'test-directodegranja.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      expect(store1.pingSqlite()).toBe(true);
+      expect(store1.getStorageInfo()).toEqual({
+        engine: 'sqlite',
+        walMode: true,
+        dbFileName: 'test-directodegranja.db',
+      });
+
+      const db1 = store1.getDb();
+      expect(db1.users.length).toBeGreaterThanOrEqual(5);
+      expect(db1.customers.length).toBe(0);
+
+      const sqliName = "Sr. Pablo'; DROP TABLE users; --";
+      db1.customers.push({
+        id: 'cust-sqli-1',
+        businessName: sqliName,
+        contactName: 'Pablo',
+        phone: '5511223344',
+        address: 'Bodega 4',
+        notes: 'Prueba parametrizada',
+        active: true,
+        createdByUserId: 'usr-owner-01',
+        mergedIntoCustomerId: null,
+        createdAtUtc: '2026-11-25T10:00:00Z',
+      });
+
+      const shpFolio = store1.reserveNextFolio('E');
+      db1.warehouseShipments.push({
+        id: 'shp-sqlite-1',
+        series: 'E',
+        folioNumber: shpFolio.folioNumber,
+        folioFormatted: shpFolio.folioFormatted,
+        vehicleType: 'torton',
+        referenceCode: 'REM-777',
+        originFarm: 'Granja Central',
+        driverName: 'Hunter',
+        arrivedAtUtc: '2026-11-25T10:05:00Z',
+        registeredByUserId: 'usr-owner-01',
+        registeredByName: 'Don Juan',
+        notes: '',
+        lines: [
+          {
+            id: 'shl-sqlite-1',
+            shipmentId: 'shp-sqlite-1',
+            productType: 'huevo',
+            brandKey: 'enerhuevo',
+            brandName: 'Enerhuevo',
+            boxesCount: 40.5,
+            totalGrams: 992_250,
+          },
+          {
+            id: 'shl-sqlite-2',
+            shipmentId: 'shp-sqlite-1',
+            productType: 'azucar',
+            brandKey: 'azucar:azucar estandar',
+            brandName: 'Azúcar Estándar',
+            boxesCount: 20,
+            totalGrams: 1_000_000,
+          },
+        ],
+      });
+
+      store1.persist();
+      store1.close();
+
+      // Simular reinicio del servidor cargando desde el mismo archivo SQLite
+      const store2 = createLedgerStore(dbPath);
+      expect(store2.pingSqlite()).toBe(true);
+      const db2 = store2.getDb();
+      expect(db2.users.length).toBeGreaterThanOrEqual(5);
+      expect(db2.customers).toHaveLength(1);
+      expect(db2.customers[0].businessName).toBe(sqliName);
+      expect(db2.warehouseShipments).toHaveLength(1);
+      expect(db2.warehouseShipments[0].folioFormatted).toBe('E-0001');
+      expect(db2.warehouseShipments[0].lines[0].boxesCount).toBe(40.5);
+      expect(db2.warehouseShipments[0].lines[1].productType).toBe('azucar');
+      expect(db2.settings.nextFolioBySeries.E).toBe(2);
+      store2.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Bodega avanzado: Tara de cartón 2 kg, medias cajas, bultos de azúcar y ticket multimarca', () => {
+  it('Descuenta 2 kg por caja completa y 1 kg por media caja en peso por caja', () => {
+    const res = deductCartonTareFromPerBoxWeights([26_500, 27_000], [13_500]);
+    expect(res.tareGrams).toBe(5000);
+    expect(res.netBoxesGrams).toEqual([24_500, 25_000, 12_500]);
+
+    expect(() => deductCartonTareFromPerBoxWeights([2000], [])).toThrow(/2\.00 kg/);
+    expect(() => deductCartonTareFromPerBoxWeights([], [1000])).toThrow(/1\.00 kg/);
+  });
+
+  it('Divide peso total proporcionalmente entre cajas completas y medias cajas sin perder gramos', () => {
+    const split = splitTotalGramsIntoHalfAwareBoxes(62_000, 2, 1);
+    expect(split).toHaveLength(3);
+    expect(split.reduce((a, b) => a + b, 0)).toBe(62_000);
+    expect(split[0]).toBeGreaterThan(split[2]);
+  });
+
+  it('Descuenta múltiples marcas de huevo (con medias cajas y distinto precio) y bultos de azúcar en el mismo ticket', () => {
+    const shipments: WarehouseShipment[] = [
+      {
+        id: 'shp-mix-1',
+        series: 'E',
+        folioNumber: 1,
+        folioFormatted: 'E-0001',
+        vehicleType: 'trailer',
+        referenceCode: 'REM-500',
+        originFarm: 'Granja Origen',
+        driverName: 'Hunter',
+        arrivedAtUtc: '2026-11-25T08:00:00Z',
+        registeredByUserId: 'usr-owner-01',
+        registeredByName: 'Don Juan',
+        notes: '',
+        lines: [
+          {
+            id: 'l-1',
+            shipmentId: 'shp-mix-1',
+            productType: 'huevo',
+            brandKey: 'enerhuevo',
+            brandName: 'Enerhuevo',
+            boxesCount: 20,
+            totalGrams: 490_000,
+          },
+          {
+            id: 'l-2',
+            shipmentId: 'shp-mix-1',
+            productType: 'huevo',
+            brandKey: 'san juan',
+            brandName: 'San Juan',
+            boxesCount: 10.5,
+            totalGrams: 252_000,
+          },
+          {
+            id: 'l-3',
+            shipmentId: 'shp-mix-1',
+            productType: 'azucar',
+            brandKey: 'azucar:azucar estandar',
+            brandName: 'Azúcar Estándar',
+            boxesCount: 15,
+            totalGrams: 750_000,
+          },
+        ],
+      },
+    ];
+
+    const sugarSubtotal = calculateSugarLineSubtotalCentavos(3, 115_000);
+    expect(sugarSubtotal).toBe(345_000);
+
+    const multiSale: Delivery = {
+      id: 'del-multi-1',
+      vendorId: 'usr-owner-01',
+      vendorName: 'Don Juan (Bodega)',
+      workdayId: 'wd-bodega-2026-11-25',
+      driverName: 'Entrega en bodega',
+      helpersNames: [],
+      series: 'BD',
+      folioNumber: 1,
+      folioFormatted: 'BD-0001',
+      customerId: 'cust-1',
+      customerName: 'Cliente Bodega',
+      createdAtUtc: '2026-11-25T09:00:00Z',
+      priceCentavosPerKg: 3800,
+      isSpecialPrice: false,
+      totalGrams: 199_000,
+      calculatedTotalExactMilliCentavos: 530_000_000,
+      totalToChargeCentavos: 530_000,
+      status: 'vigente',
+      cancellationReason: null,
+      syncedAtUtc: '2026-11-25T09:00:00Z',
+      sourceType: 'bodega',
+      brandKey: 'multi',
+      brandName: 'Enerhuevo (1.5 cjs), San Juan (0.5 cjs), Azúcar Estándar (3 bultos)',
+      boxesCount: 5,
+      saleItems: [
+        {
+          id: 'si-1',
+          productType: 'huevo',
+          brandKey: 'enerhuevo',
+          brandName: 'Enerhuevo',
+          fullBoxes: 1,
+          halfBoxes: 1,
+          quantity: 1.5,
+          weighMode: 'cajas',
+          tareGrams: 3000,
+          totalGrams: 37_000,
+          unitPriceCentavos: 3700,
+          isSpecialPrice: false,
+          subtotalCentavos: 136_900,
+          boxesGrams: [24_500, 12_500],
+        },
+        {
+          id: 'si-2',
+          productType: 'huevo',
+          brandKey: 'san juan',
+          brandName: 'San Juan',
+          fullBoxes: 0,
+          halfBoxes: 1,
+          quantity: 0.5,
+          weighMode: 'total',
+          tareGrams: 0,
+          totalGrams: 12_000,
+          unitPriceCentavos: 4000,
+          isSpecialPrice: true,
+          subtotalCentavos: 48_000,
+          boxesGrams: [12_000],
+        },
+        {
+          id: 'si-3',
+          productType: 'azucar',
+          brandKey: 'azucar:azucar estandar',
+          brandName: 'Azúcar Estándar',
+          fullBoxes: 3,
+          halfBoxes: 0,
+          quantity: 3,
+          tareGrams: 0,
+          totalGrams: 150_000,
+          unitPriceCentavos: 115_000,
+          isSpecialPrice: false,
+          subtotalCentavos: 345_000,
+          boxesGrams: [50_000, 50_000, 50_000],
+        },
+      ],
+    };
+
+    const invAfter = calculateBrandInventory(shipments, [multiSale], []);
+    expect(invAfter.find((i) => i.brandKey === 'enerhuevo')!.boxesAvailable).toBe(18.5);
+    expect(invAfter.find((i) => i.brandKey === 'san juan')!.boxesAvailable).toBe(10);
+    expect(invAfter.find((i) => i.brandKey === 'azucar:azucar estandar')!.boxesAvailable).toBe(12);
+    expect(invAfter.find((i) => i.brandKey === 'azucar:azucar estandar')!.gramsAvailable).toBe(600_000);
+
+    expect(() => validateBodegaSaleStock(invAfter, 'Azúcar Estándar', 13, 'azucar')).toThrow(
+      /Inventario insuficiente/
+    );
+    expect(() => validateBodegaSaleStock(invAfter, 'Enerhuevo', 19, 'huevo')).toThrow(
+      /Inventario insuficiente/
+    );
+
+    // Cancelar restaura todo
+    multiSale.status = 'cancelada';
+    const invRestored = calculateBrandInventory(shipments, [multiSale], []);
+    expect(invRestored.find((i) => i.brandKey === 'enerhuevo')!.boxesAvailable).toBe(20);
+    expect(invRestored.find((i) => i.brandKey === 'san juan')!.boxesAvailable).toBe(10.5);
+    expect(invRestored.find((i) => i.brandKey === 'azucar:azucar estandar')!.boxesAvailable).toBe(15);
   });
 });

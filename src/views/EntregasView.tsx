@@ -325,6 +325,34 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                 )}
               </div>
 
+              {Array.isArray(selectedDelivery.saleItems) && selectedDelivery.saleItems.length > 0 && (
+                <div className="pos-subpanel rounded p-2.5 space-y-1 text-xs">
+                  <div className="font-bold text-[#130824] dark:text-[#F4EFFF]">
+                    Desglose de productos en esta venta de bodega
+                  </div>
+                  {selectedDelivery.saleItems.map((it) => (
+                    <div
+                      key={it.id}
+                      className="flex flex-wrap items-center justify-between gap-2 font-mono text-[11px] text-[#4B3969] dark:text-[#D9CEEE]"
+                    >
+                      <span>
+                        <strong>{it.brandName}</strong> ({it.productType === 'azucar' ? 'Azúcar' : 'Huevo'}):{' '}
+                        {it.quantity} {it.productType === 'azucar' ? 'bultos' : 'cjs'} ·{' '}
+                        {formatKgFromGrams(it.totalGrams)}
+                        {it.tareGrams > 0 ? ` (tara -${formatKgFromGrams(it.tareGrams)})` : ''}
+                      </span>
+                      <span>
+                        {formatCurrencyFromCentavos(it.unitPriceCentavos, true)}
+                        {it.productType === 'azucar' ? '/bulto' : '/kg'} ·{' '}
+                        <strong className="text-[#130824] dark:text-[#F4EFFF]">
+                          {formatCurrencyFromCentavos(it.subtotalCentavos)}
+                        </strong>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {showCancelBox && (
                 <div className="rounded-md border border-[#F43F5E]/40 bg-[#F43F5E]/10 p-3 space-y-2">
                   <label className="block text-xs font-semibold text-[#E11D48] dark:text-[#FDA4AF]">

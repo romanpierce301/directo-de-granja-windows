@@ -12,13 +12,25 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-string sqlConn = builder.Configuration.GetConnectionString("SqlServer")
-    ?? throw new InvalidOperationException("Falta ConnectionStrings:SqlServer.");
+string dbProvider = builder.Configuration["DatabaseProvider"] ?? "Sqlite";
+string sqliteConn = builder.Configuration.GetConnectionString("Sqlite")
+    ?? "Data Source=data/directodegranja.db";
+string? sqlConn = builder.Configuration.GetConnectionString("SqlServer");
 string redisConn = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
 string jwtKey = builder.Configuration["Jwt:SigningKey"]
     ?? throw new InvalidOperationException("Falta Jwt:SigningKey.");
 
-builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o => o.UseSqlServer(sqlConn));
+builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o =>
+{
+    if (string.Equals(dbProvider, "SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(sqlConn))
+    {
+        o.UseSqlServer(sqlConn);
+    }
+    else
+    {
+        o.UseSqlite(sqliteConn);
+    }
+});
 builder.Services.AddScoped<IHuevoControlDbContext>(sp => sp.GetRequiredService<HuevoControlSqlServerDbContext>());
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
@@ -47,6 +59,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "data"));
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<HuevoControlSqlServerDbContext>();
+    db.Database.EnsureCreated();
+}
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseAuthentication();

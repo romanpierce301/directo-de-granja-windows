@@ -267,6 +267,15 @@ export function SistemaView({
                   {health.metrics?.pendingAlertsCount ?? 0}
                 </div>
               </div>
+              <div className="pos-subpanel rounded p-2.5 col-span-2">
+                <div className="text-[11px] text-[#6B5B82] dark:text-[#9E8FB2]">
+                  Almacenamiento principal
+                </div>
+                <div className="font-bold text-[#059669] dark:text-[#10B981]">
+                  SQLite ({health.storage?.dbFileName ?? 'directodegranja.db'}
+                  {health.storage?.walMode ? ' · WAL activo' : ''})
+                </div>
+              </div>
             </div>
           )}
 
@@ -288,7 +297,7 @@ export function SistemaView({
           <div className="flex items-center gap-2">
             <Monitor className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC]" />
             <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
-              Solución nativa .NET 8 (WPF .exe + Microservicios + EF Core SQL Server + Redis)
+              Solución nativa .NET 8 (WPF .exe + Microservicios + EF Core SQLite + Redis)
             </h3>
           </div>
           <span className="inline-flex items-center gap-1 text-xs font-mono text-[#059669] dark:text-[#10B981]">
@@ -297,7 +306,7 @@ export function SistemaView({
         </div>
 
         <p className="text-xs text-[#4B3969] dark:text-[#D9CEEE] leading-relaxed">
-          En el directorio <code className="font-mono">/dotnet-solution</code> del repositorio se encuentra la solución modular completa en .NET 8: aplicación de escritorio WPF para Windows con plantilla de ticket 48mm y caché local, microservicios (Gateway YARP, AuthService JWT, SyncService SignalR, LedgerService EF Core SQL Server + Redis, MonitoringService), suite xUnit (&gt;80% cobertura) y pipeline CI/CD en GitHub Actions que genera el ejecutable único <code className="font-mono">.exe</code>.
+          En el directorio <code className="font-mono">/dotnet-solution</code> del repositorio se encuentra la solución modular completa en .NET 8: aplicación de escritorio WPF para Windows con plantilla de ticket 48mm y almacenamiento principal en SQLite, microservicios (Gateway YARP, AuthService JWT, SyncService SignalR, LedgerService EF Core SQLite + Redis, MonitoringService), suite xUnit (&gt;80% cobertura) y pipeline CI/CD en GitHub Actions que genera el ejecutable único <code className="font-mono">.exe</code>.
         </p>
 
         <div className="rounded-md bg-[#130824] text-[#F4EFFF] p-3.5 font-mono text-[11.5px] overflow-x-auto space-y-1 border border-[#341961]">

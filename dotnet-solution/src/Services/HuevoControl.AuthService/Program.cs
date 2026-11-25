@@ -10,14 +10,26 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-string sqlConn = builder.Configuration.GetConnectionString("SqlServer")
-    ?? throw new InvalidOperationException("Falta ConnectionStrings:SqlServer.");
+string dbProvider = builder.Configuration["DatabaseProvider"] ?? "Sqlite";
+string sqliteConn = builder.Configuration.GetConnectionString("Sqlite")
+    ?? "Data Source=data/directodegranja.db";
+string? sqlConn = builder.Configuration.GetConnectionString("SqlServer");
 string jwtKey = builder.Configuration["Jwt:SigningKey"]
     ?? throw new InvalidOperationException("Falta Jwt:SigningKey.");
 string aesKey = builder.Configuration["Security:AesKey"]
     ?? throw new InvalidOperationException("Falta Security:AesKey.");
 
-builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o => o.UseSqlServer(sqlConn));
+builder.Services.AddDbContext<HuevoControlSqlServerDbContext>(o =>
+{
+    if (string.Equals(dbProvider, "SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(sqlConn))
+    {
+        o.UseSqlServer(sqlConn);
+    }
+    else
+    {
+        o.UseSqlite(sqliteConn);
+    }
+});
 builder.Services.AddScoped<IHuevoControlDbContext>(sp => sp.GetRequiredService<HuevoControlSqlServerDbContext>());
 builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddSingleton<IAesEncryptionService>(_ => new Aes256EncryptionService(aesKey));
@@ -66,6 +78,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "data"));
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<HuevoControlSqlServerDbContext>();
+    db.Database.EnsureCreated();
+}
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseAuthentication();

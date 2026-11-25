@@ -308,12 +308,13 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
         wb,
         XLSX.utils.json_to_sheet(
           inv.map((b) => ({
-            Marca: escapeExcelFormulaInjection(b.brandName),
-            CajasLlegaron: b.boxesArrived,
+            Tipo: b.productType === 'azucar' ? 'Azúcar (bultos)' : 'Huevo (cajas)',
+            MarcaProducto: escapeExcelFormulaInjection(b.brandName),
+            UnidadesLlegaron: b.boxesArrived,
             KilosLlegaron: formatKgFromGrams(b.gramsArrived),
-            CajasVendidas: b.boxesSold,
+            UnidadesVendidas: b.boxesSold,
             KilosVendidos: formatKgFromGrams(b.gramsSold),
-            CajasDisponibles: b.boxesAvailable,
+            UnidadesDisponibles: b.boxesAvailable,
             KilosDisponibles: formatKgFromGrams(b.gramsAvailable),
           }))
         ),
@@ -330,8 +331,9 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
               Referencia: escapeExcelFormulaInjection(s.referenceCode),
               Granja: escapeExcelFormulaInjection(s.originFarm),
               Chofer: escapeExcelFormulaInjection(s.driverName),
-              Marca: escapeExcelFormulaInjection(l.brandName),
-              Cajas: l.boxesCount,
+              Tipo: l.productType === 'azucar' ? 'Azúcar' : 'Huevo',
+              MarcaProducto: escapeExcelFormulaInjection(l.brandName),
+              Cantidad: l.boxesCount,
               PesoTotal: formatKgFromGrams(l.totalGrams),
             }))
           )

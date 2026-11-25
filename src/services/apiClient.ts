@@ -184,7 +184,13 @@ export class ApiClient {
     originFarm: string;
     driverName: string;
     notes: string;
-    lines: { brandName: string; boxesCount: number; totalKg: number }[];
+    lines: {
+      productType: 'huevo' | 'azucar';
+      brandName: string;
+      boxesCount: number;
+      weightPerBultoKg?: number;
+      totalKg: number;
+    }[];
   }) {
     return this.request('/api/bodega/shipments', {
       method: 'POST',
@@ -196,13 +202,28 @@ export class ApiClient {
     customerId?: string;
     newCustomerName?: string;
     newCustomerPhone?: string;
-    brandName: string;
-    boxesCount: number;
-    weighMode: 'total' | 'cajas';
-    totalKg?: number;
-    boxesGrams?: number[];
-    pricePesosPerKg: number;
-    isSpecialPrice: boolean;
+    items: (
+      | {
+          productType: 'huevo';
+          brandName: string;
+          fullBoxes: number;
+          halfBoxes: number;
+          weighMode: 'total' | 'cajas';
+          totalKg?: number;
+          fullBoxesGrossGrams?: number[];
+          halfBoxesGrossGrams?: number[];
+          pricePesosPerKg: number;
+          isSpecialPrice: boolean;
+        }
+      | {
+          productType: 'azucar';
+          brandName: string;
+          bultosCount: number;
+          weightPerBultoKg: number;
+          pricePerBultoPesos: number;
+          isSpecialPrice?: boolean;
+        }
+    )[];
     paidPesos?: number;
     paymentMethod?: 'efectivo' | 'transferencia';
   }) {

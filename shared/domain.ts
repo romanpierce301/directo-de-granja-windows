@@ -89,10 +89,15 @@ export interface DeliveryBox {
 }
 
 export type VehicleType = 'torton' | 'trailer';
+export type BodegaProductType = 'huevo' | 'azucar';
+
+export const BOX_TARE_GRAMS = 2000;
+export const HALF_BOX_TARE_GRAMS = 1000;
 
 export interface WarehouseShipmentLine {
   id: string;
   shipmentId: string;
+  productType?: BodegaProductType;
   brandKey: string;
   brandName: string;
   boxesCount: number;
@@ -116,6 +121,7 @@ export interface WarehouseShipment {
 }
 
 export interface BrandInventorySummary {
+  productType: BodegaProductType;
   brandKey: string;
   brandName: string;
   boxesArrived: number;
@@ -126,6 +132,24 @@ export interface BrandInventorySummary {
   gramsAvailable: number;
   avgGramsPerBox: number;
   lastArrivalUtc: string | null;
+}
+
+export interface BodegaSaleItem {
+  id: string;
+  productType: BodegaProductType;
+  brandKey: string;
+  brandName: string;
+  fullBoxes: number;
+  halfBoxes: number;
+  quantity: number;
+  weighMode?: 'total' | 'cajas';
+  tareGrams: number;
+  totalGrams: number;
+  unitPriceCentavos: number;
+  isSpecialPrice: boolean;
+  subtotalCentavos: number;
+  calculatedExactLabel?: string;
+  boxesGrams: number[];
 }
 
 export interface Delivery {
@@ -153,6 +177,7 @@ export interface Delivery {
   brandKey?: string | null;
   brandName?: string | null;
   boxesCount?: number | null;
+  saleItems?: BodegaSaleItem[];
 }
 
 export interface DailyLoss {
@@ -542,6 +567,23 @@ export function normalizeBrandName(brand: string): string {
     .trim();
 }
 
+export function normalizeProductKey(
+  brand: string,
+  productType: BodegaProductType = 'huevo'
+): string {
+  const base = normalizeBrandName(brand);
+  if (!base) return '';
+  return productType === 'azucar' ? `azucar:${base}` : base;
+}
+
+export function roundHalfUnits(val: number): number {
+  return Math.round(val * 2) / 2;
+}
+
+export function isValidHalfUnitCount(val: number): boolean {
+  return Number.isFinite(val) && val > 0 && Math.abs(val * 2 - Math.round(val * 2)) < 1e-6;
+}
+
 /**
  * Divide un peso total en gramos enteros entre N cajas exactamente sin pérdida ni redondeo flotante.
  */
@@ -565,9 +607,107 @@ export function splitTotalGramsIntoBoxes(totalGrams: number, boxesCount: number)
 }
 
 /**
- * Calcula el inventario exacto de bodega por marca de huevo:
- * - Suma todas las cajas y gramos llegados en tortones/tráileres.
- * - Descuenta únicamente entregas vigentes asociadas a esa marca (si una venta se cancela, el stock regresa).
+ * Divide un peso total en gramos enteros entre cajas completas (peso 2) y medias cajas (peso 1).
+ */
+export function splitTotalGramsIntoHalfAwareBoxes(
+  totalGrams: number,
+  fullBoxes: number,
+  halfBoxes: number
+): number[] {
+  if (!Number.isInteger(fullBoxes) || fullBoxes < 0 || !Number.isInteger(halfBoxes) || halfBoxes < 0) {
+    throw new Error('Las cajas completas y medias cajas deben ser enteros mayores o iguales a 0.');
+  }
+  if (fullBoxes + halfBoxes <= 0) {
+    throw new Error('Debe indicar al menos una caja o media caja.');
+  }
+  if (halfBoxes === 0) {
+    return splitTotalGramsIntoBoxes(totalGrams, fullBoxes);
+  }
+  if (!Number.isInteger(totalGrams) || totalGrams < fullBoxes + halfBoxes) {
+    throw new Error('El peso total en gramos debe ser suficiente para cubrir cada caja y media caja.');
+  }
+
+  const totalParts = fullBoxes * 2 + halfBoxes;
+  const baseUnit = Math.floor(totalGrams / totalParts);
+  let rem = totalGrams % totalParts;
+  const result: number[] = [];
+
+  for (let i = 0; i < fullBoxes; i++) {
+    const extra = Math.min(2, rem);
+    rem -= extra;
+    result.push(baseUnit * 2 + extra);
+  }
+  for (let i = 0; i < halfBoxes; i++) {
+    const extra = Math.min(1, rem);
+    rem -= extra;
+    result.push(baseUnit + extra);
+  }
+
+  // Fallback if totalGrams < totalParts (small test values) so every entry > 0 and sum === totalGrams
+  if (result.some((g) => g <= 0)) {
+    return splitTotalGramsIntoBoxes(totalGrams, fullBoxes + halfBoxes);
+  }
+
+  return result;
+}
+
+/**
+ * Descuenta tara de cartón en modo "peso por caja":
+ * - 2,000 g (2.00 kg) por cada caja completa
+ * - 1,000 g (1.00 kg) por cada media caja
+ */
+export function deductCartonTareFromPerBoxWeights(
+  grossFullBoxesGrams: number[],
+  grossHalfBoxesGrams: number[]
+): { netBoxesGrams: number[]; tareGrams: number } {
+  if (grossFullBoxesGrams.length + grossHalfBoxesGrams.length === 0) {
+    throw new Error('Debe capturar al menos una caja o media caja.');
+  }
+  const netBoxesGrams: number[] = [];
+  let tareGrams = 0;
+
+  for (let i = 0; i < grossFullBoxesGrams.length; i++) {
+    const gross = grossFullBoxesGrams[i];
+    if (!Number.isInteger(gross) || gross <= BOX_TARE_GRAMS) {
+      throw new Error(
+        `La caja #${i + 1} debe pesar más de 2.00 kg en bruto para descontar los 2 kg de cartón.`
+      );
+    }
+    netBoxesGrams.push(gross - BOX_TARE_GRAMS);
+    tareGrams += BOX_TARE_GRAMS;
+  }
+
+  for (let i = 0; i < grossHalfBoxesGrams.length; i++) {
+    const gross = grossHalfBoxesGrams[i];
+    if (!Number.isInteger(gross) || gross <= HALF_BOX_TARE_GRAMS) {
+      throw new Error(
+        `La media caja #${i + 1} debe pesar más de 1.00 kg en bruto para descontar 1 kg de cartón.`
+      );
+    }
+    netBoxesGrams.push(gross - HALF_BOX_TARE_GRAMS);
+    tareGrams += HALF_BOX_TARE_GRAMS;
+  }
+
+  return { netBoxesGrams, tareGrams };
+}
+
+export function calculateSugarLineSubtotalCentavos(
+  bultosCount: number,
+  pricePerBultoCentavos: number
+): number {
+  if (!Number.isInteger(bultosCount) || bultosCount <= 0) {
+    throw new Error('La cantidad de bultos de azúcar debe ser un entero mayor a 0.');
+  }
+  if (!Number.isInteger(pricePerBultoCentavos) || pricePerBultoCentavos <= 0) {
+    throw new Error('El precio por bulto de azúcar debe ser mayor a $0.');
+  }
+  return bultosCount * pricePerBultoCentavos;
+}
+
+/**
+ * Calcula el inventario exacto de bodega por marca de huevo y bultos de azúcar:
+ * - Suma todas las cajas/bultos y gramos llegados en tortones/tráileres.
+ * - Descuenta únicamente entregas vigentes asociadas a ese producto (si una venta se cancela, el stock regresa).
  */
 export function calculateBrandInventory(
   shipments: WarehouseShipment[],
@@ -578,16 +718,18 @@ export function calculateBrandInventory(
 
   for (const s of shipments) {
     for (const line of s.lines) {
-      const key = line.brandKey || normalizeBrandName(line.brandName);
+      const productType: BodegaProductType = line.productType === 'azucar' ? 'azucar' : 'huevo';
+      const key = line.brandKey || normalizeProductKey(line.brandName, productType);
       if (!key) continue;
       const existing = map.get(key);
       if (!existing) {
         map.set(key, {
+          productType,
           brandKey: key,
           brandName: line.brandName.trim(),
-          boxesArrived: line.boxesCount,
+          boxesArrived: roundHalfUnits(line.boxesCount),
           boxesSold: 0,
-          boxesAvailable: line.boxesCount,
+          boxesAvailable: roundHalfUnits(line.boxesCount),
           gramsArrived: line.totalGrams,
           gramsSold: 0,
           gramsAvailable: line.totalGrams,
@@ -596,7 +738,7 @@ export function calculateBrandInventory(
           lastArrivalUtc: s.arrivedAtUtc,
         });
       } else {
-        existing.boxesArrived += line.boxesCount;
+        existing.boxesArrived = roundHalfUnits(existing.boxesArrived + line.boxesCount);
         existing.gramsArrived += line.totalGrams;
         if (!existing.lastArrivalUtc || s.arrivedAtUtc > existing.lastArrivalUtc) {
           existing.lastArrivalUtc = s.arrivedAtUtc;
@@ -607,17 +749,49 @@ export function calculateBrandInventory(
 
   for (const d of deliveries) {
     if (d.status !== 'vigente') continue;
+
+    if (Array.isArray(d.saleItems) && d.saleItems.length > 0) {
+      for (const item of d.saleItems) {
+        const productType: BodegaProductType = item.productType === 'azucar' ? 'azucar' : 'huevo';
+        const key = item.brandKey || normalizeProductKey(item.brandName, productType);
+        if (!key) continue;
+        const qty = roundHalfUnits(item.quantity);
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, {
+            productType,
+            brandKey: key,
+            brandName: item.brandName || key,
+            boxesArrived: 0,
+            boxesSold: qty,
+            boxesAvailable: -qty,
+            gramsArrived: 0,
+            gramsSold: item.totalGrams,
+            gramsAvailable: 0,
+            avgGramsPerBox: 0,
+            lastArrivalUtc: null,
+          });
+        } else {
+          existing.boxesSold = roundHalfUnits(existing.boxesSold + qty);
+          existing.gramsSold += item.totalGrams;
+        }
+      }
+      continue;
+    }
+
     const key = d.brandKey || (d.brandName ? normalizeBrandName(d.brandName) : '');
     if (!key) continue;
+    const productType: BodegaProductType = key.startsWith('azucar:') ? 'azucar' : 'huevo';
 
     const delBoxesCount =
       typeof d.boxesCount === 'number' && d.boxesCount > 0
-        ? d.boxesCount
+        ? roundHalfUnits(d.boxesCount)
         : deliveryBoxes.filter((b) => b.deliveryId === d.id).length;
 
     const existing = map.get(key);
     if (!existing) {
       map.set(key, {
+        productType,
         brandKey: key,
         brandName: d.brandName || key,
         boxesArrived: 0,
@@ -630,39 +804,58 @@ export function calculateBrandInventory(
         lastArrivalUtc: null,
       });
     } else {
-      existing.boxesSold += delBoxesCount;
+      existing.boxesSold = roundHalfUnits(existing.boxesSold + delBoxesCount);
       existing.gramsSold += d.totalGrams;
     }
   }
 
   const list: BrandInventorySummary[] = [];
   for (const item of map.values()) {
-    item.boxesAvailable = item.boxesArrived - item.boxesSold;
+    item.boxesAvailable = roundHalfUnits(item.boxesArrived - item.boxesSold);
     item.gramsAvailable = Math.max(0, item.gramsArrived - item.gramsSold);
     item.avgGramsPerBox =
       item.boxesArrived > 0 ? Math.round(item.gramsArrived / item.boxesArrived) : 0;
     list.push(item);
   }
 
-  return list.sort((a, b) => a.brandName.localeCompare(b.brandName, 'es'));
+  return list.sort((a, b) => {
+    if (a.productType !== b.productType) {
+      return a.productType === 'huevo' ? -1 : 1;
+    }
+    return a.brandName.localeCompare(b.brandName, 'es');
+  });
 }
 
 export function validateBodegaSaleStock(
   inventory: BrandInventorySummary[],
   brandNameOrKey: string,
-  boxesRequested: number
+  boxesRequested: number,
+  productType: BodegaProductType = 'huevo'
 ): BrandInventorySummary {
-  if (!Number.isInteger(boxesRequested) || boxesRequested <= 0) {
-    throw new Error('La cantidad de cajas a vender debe ser un entero mayor a 0.');
+  const unitLabel = productType === 'azucar' ? 'bultos' : 'cajas';
+  if (productType === 'azucar') {
+    if (!Number.isInteger(boxesRequested) || boxesRequested <= 0) {
+      throw new Error('La cantidad de bultos de azúcar a vender debe ser un entero mayor a 0.');
+    }
+  } else {
+    if (!isValidHalfUnitCount(boxesRequested)) {
+      throw new Error('La cantidad de cajas a vender debe ser mayor a 0 (en múltiplos de 0.5).');
+    }
   }
-  const key = normalizeBrandName(brandNameOrKey);
-  const stock = inventory.find((i) => i.brandKey === key);
+
+  const normalizedKey = normalizeProductKey(brandNameOrKey, productType);
+  const stock = inventory.find(
+    (i) =>
+      i.productType === productType &&
+      (i.brandKey === brandNameOrKey || i.brandKey === normalizedKey)
+  );
   if (!stock || stock.boxesArrived <= 0) {
-    throw new Error(`No hay inventario registrado en bodega para la marca "${brandNameOrKey}".`);
+    throw new Error(`No hay inventario registrado en bodega para "${brandNameOrKey}".`);
   }
-  if (stock.boxesAvailable < boxesRequested) {
+  const reqRounded = roundHalfUnits(boxesRequested);
+  if (stock.boxesAvailable + 1e-6 < reqRounded) {
     throw new Error(
-      `Inventario insuficiente de ${stock.brandName}: disponibles ${stock.boxesAvailable} cajas, solicitadas ${boxesRequested} cajas.`
+      `Inventario insuficiente de ${stock.brandName}: disponibles ${stock.boxesAvailable} ${unitLabel}, solicitados ${reqRounded} ${unitLabel}.`
     );
   }
   return stock;
