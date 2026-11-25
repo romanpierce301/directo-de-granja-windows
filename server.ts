@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -11,6 +12,7 @@ import {
   calculateBrandInventory,
   calculateCustomerLedger,
   calculateDeliveryTotals,
+  calculateDeliveryItemsTotals,
   calculateVendorClosing,
   formatCurrencyFromCentavos,
   formatFolio,
@@ -25,6 +27,7 @@ import {
   validatePaymentAmount,
   type Customer,
   type Delivery,
+  type DeliveryItem,
   type DeliveryBox,
   type Payment,
   type WarehouseShipment,
@@ -32,10 +35,13 @@ import {
 } from './shared/domain.ts';
 import {
   hashPassword,
+  protectSensitive,
+  revealSensitive,
   requireAuth,
   requireRole,
   sanitizePlainText,
   signJwt,
+  validateSecurityConfiguration,
   verifyJwt,
   verifyPassword,
   type AuthenticatedRequest,
@@ -46,13 +52,26 @@ import { swaggerSpec } from './server/swagger.ts';
 const PORT = 3000;
 
 async function bootstrap() {
+  validateSecurityConfiguration();
   const app = express();
   const httpServer = http.createServer(app);
 
   // Security headers compatible with AI Studio preview iframe
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          connectSrc: ["'self'", 'ws:', 'wss:'],
+          fontSrc: ["'self'", 'data:'],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      } : false,
       crossOriginEmbedderPolicy: false,
       xFrameOptions: false,
     })
@@ -77,7 +96,7 @@ async function bootstrap() {
   });
 
   // WebSocket server for real-time sync & proactive alerts
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 64 * 1024, perMessageDeflate: false });
   const wsClients = new Set<{ ws: WebSocket; userId: string; role: string }>();
 
   wss.on('connection', (ws, req) => {
@@ -89,6 +108,11 @@ async function bootstrap() {
         return;
       }
       const claims = verifyJwt(token);
+      const user = store.getRawUsers().find((u) => u.id === claims.sub && u.status === 'activa');
+      if (!user) {
+        ws.close(4003, 'Cuenta inactiva');
+        return;
+      }
       const client = { ws, userId: claims.sub, role: claims.role };
       wsClients.add(client);
 
@@ -129,18 +153,10 @@ async function bootstrap() {
 
   // Health & real-time telemetry endpoint
   app.get('/api/health', (_req, res) => {
-    const db = store.getDb();
     res.json({
       status: 'healthy',
       service: 'Directo de Granja — Te faltan huevos a nosotros nos sobran',
       timestampUtc: new Date().toISOString(),
-      activeWsClients: wsClients.size,
-      metrics: {
-        deliveriesCount: db.deliveries.length,
-        customersCount: db.customers.filter((c) => !c.mergedIntoCustomerId).length,
-        vendorsCount: db.users.filter((u) => u.role === 'vendedor').length,
-        pendingAlertsCount: store.computeProactiveAlerts().filter((a) => !a.acknowledged).length,
-      },
     });
   });
 
@@ -195,6 +211,38 @@ async function bootstrap() {
   app.get('/api/auth/users', requireAuth, requireRole('dueno'), (_req, res) => {
     const state = store.getState();
     res.json({ users: state.users, devices: state.devices });
+  });
+
+  // First contact from a vendor phone creates a pending device for owner approval.
+  app.post('/api/devices/register', requireAuth, requireRole('vendedor'), (req: AuthenticatedRequest, res) => {
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
+    const deviceName = sanitizePlainText(req.body?.deviceName, 100);
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(deviceId) || !deviceName) {
+      res.status(400).json({ error: 'Se requiere identificador y nombre válidos del teléfono.' });
+      return;
+    }
+    const db = store.getDb();
+    const existing = db.devices.find((device) => device.id === deviceId);
+    if (existing && existing.userId !== req.user!.sub) {
+      res.status(409).json({ error: 'Este dispositivo ya está vinculado a otra cuenta.' });
+      return;
+    }
+    const device = existing ?? {
+      id: deviceId,
+      userId: req.user!.sub,
+      deviceName,
+      active: false,
+      lastSyncUtc: null,
+      pendingSyncCount: 0,
+    };
+    device.deviceName = deviceName;
+    if (!existing) db.devices.push(device);
+    store.addAudit('devices', deviceId, existing ? 'ACTUALIZAR_DISPOSITIVO' : 'SOLICITAR_DISPOSITIVO',
+      existing ? `El equipo ${deviceName} actualizó su registro.` : `El equipo ${deviceName} espera autorización.`,
+      req.user!.sub, req.user!.name);
+    store.persist();
+    broadcastEvent('sync:state_updated', { entity: 'devices' });
+    res.status(existing ? 200 : 202).json({ authorized: device.active, deviceId, status: device.active ? 'activa' : 'pendiente' });
   });
 
   app.post('/api/auth/users', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
@@ -352,6 +400,34 @@ async function bootstrap() {
     res.json({ ok: true });
   });
 
+  app.post('/api/sync/folios/reserve', syncLimiter, requireAuth, requireRole('vendedor'), (req: AuthenticatedRequest, res) => {
+    const db = store.getDb();
+    const vendor = db.users.find((user) => user.id === req.user!.sub && user.role === 'vendedor' && user.status === 'activa');
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
+    const device = db.devices.find((entry) => entry.id === deviceId && entry.userId === req.user!.sub && entry.active);
+    const count = Number.isInteger(req.body?.count) ? Number(req.body.count) : 100;
+    if (!vendor || !vendor.folioSeries || !device) {
+      res.status(403).json({ error: 'Cuenta o teléfono sin autorización activa.' });
+      return;
+    }
+    if (count < 1 || count > 500) {
+      res.status(400).json({ error: 'El bloque debe contener entre 1 y 500 folios.' });
+      return;
+    }
+    let first = 0;
+    let last = 0;
+    for (let i = 0; i < count; i++) {
+      const reserved = store.reserveNextFolio(vendor.folioSeries);
+      if (i === 0) first = reserved.folioNumber;
+      last = reserved.folioNumber;
+    }
+    device.folioBlocks ??= [];
+    device.folioBlocks.push({ series: vendor.folioSeries, start: first, end: last, usedNumbers: [] });
+    store.addAudit('devices', device.id, 'RESERVAR_FOLIOS', `Bloque ${vendor.folioSeries}-${first} a ${last} reservado para ${device.deviceName}.`, req.user!.sub, req.user!.name);
+    store.persist();
+    res.status(201).json({ series: vendor.folioSeries, start: first, end: last, folios: Array.from({ length: count }, (_, index) => first + index) });
+  });
+
   // Daily Price
   app.post('/api/prices', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const pricePesos = Number(req.body?.pricePesosPerKg);
@@ -459,6 +535,46 @@ async function bootstrap() {
     res.json({ ok: true, delivery });
   });
 
+  app.post('/api/deliveries/:id/review', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    const decision = req.body?.decision === 'aprobar' ? 'aprobada' : req.body?.decision === 'rechazar' ? 'rechazada' : null;
+    const note = sanitizePlainText(req.body?.note, 240);
+    if (!decision || (decision === 'rechazada' && note.length < 4)) {
+      res.status(400).json({ error: 'Seleccione aprobar o rechazar; para rechazar escriba un motivo.' });
+      return;
+    }
+    const db = store.getDb();
+    const delivery = db.deliveries.find((entry) => entry.id === req.params.id);
+    if (!delivery) {
+      res.status(404).json({ error: 'Entrega no encontrada.' });
+      return;
+    }
+    if (delivery.reviewStatus !== 'pendiente') {
+      res.status(409).json({ error: 'Esta entrega ya fue revisada.' });
+      return;
+    }
+    delivery.reviewStatus = decision;
+    delivery.reviewNote = note || null;
+    db.payments.filter((payment) => payment.deliveryId === delivery.id && payment.reviewStatus === 'pendiente')
+      .forEach((payment) => { payment.reviewStatus = decision; });
+    const nowUtc = new Date().toISOString();
+    db.deliveryEvents.push({
+      id: `evt-${crypto.randomUUID()}`,
+      deliveryId: delivery.id,
+      eventType: 'sincronizacion',
+      detail: decision === 'aprobada' ? 'Entrega aprobada por el dueño en Windows.' : `Entrega rechazada por el dueño: ${note}`,
+      actorUserId: req.user!.sub,
+      actorName: req.user!.name,
+      deviceId: 'win-owner-desktop',
+      occurredAtUtc: nowUtc,
+      arrivedAtServerUtc: nowUtc,
+    });
+    store.addAudit('deliveries', delivery.id, decision === 'aprobada' ? 'APROBAR_ENTREGA_ANDROID' : 'RECHAZAR_ENTREGA_ANDROID',
+      `${delivery.folioFormatted} ${decision}${note ? `: ${note}` : ''}`, req.user!.sub, req.user!.name);
+    store.persist();
+    broadcastEvent('sync:state_updated', { entity: 'deliveries', deliveryId: delivery.id });
+    res.json({ ok: true, delivery });
+  });
+
   app.post('/api/deliveries/:id/reprint', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
     const delivery = db.deliveries.find((d) => d.id === req.params.id);
@@ -532,9 +648,25 @@ async function bootstrap() {
     const phone = normalizePhone(sanitizePlainText(req.body?.phone, 20));
     const address = sanitizePlainText(req.body?.address, 200);
     const notes = sanitizePlainText(req.body?.notes, 240);
+    const rawSpecialPrice = req.body?.specialPricePesosPerKg;
+    const specialPriceCentavosPerKg = rawSpecialPrice === '' || rawSpecialPrice === null || rawSpecialPrice === undefined
+      ? null
+      : Math.round(Number(rawSpecialPrice) * 100);
+    const rawCreditDays = req.body?.creditTermDays;
+    const creditTermDays = rawCreditDays === '' || rawCreditDays === null || rawCreditDays === undefined
+      ? null
+      : Number(rawCreditDays);
 
     if (!businessName) {
       res.status(400).json({ error: 'El nombre del negocio es obligatorio.' });
+      return;
+    }
+    if (specialPriceCentavosPerKg !== null && (!Number.isInteger(specialPriceCentavosPerKg) || specialPriceCentavosPerKg <= 0 || specialPriceCentavosPerKg > 50_000)) {
+      res.status(400).json({ error: 'La tarifa especial debe ser mayor a $0 y menor o igual a $500/kg.' });
+      return;
+    }
+    if (creditTermDays !== null && (!Number.isInteger(creditTermDays) || creditTermDays < 0 || creditTermDays > 3650)) {
+      res.status(400).json({ error: 'El plazo de crédito debe ser de 0 a 3650 días.' });
       return;
     }
 
@@ -542,10 +674,12 @@ async function bootstrap() {
     const customer: Customer = {
       id: `cust-${crypto.randomUUID()}`,
       businessName,
-      contactName,
-      phone,
-      address,
-      notes,
+      contactName: protectSensitive(contactName),
+      phone: protectSensitive(phone),
+      address: protectSensitive(address),
+      notes: protectSensitive(notes),
+      specialPriceCentavosPerKg,
+      creditTermDays,
       active: true,
       createdByUserId: req.user!.sub,
       mergedIntoCustomerId: null,
@@ -562,7 +696,7 @@ async function bootstrap() {
     );
     store.persist();
     broadcastEvent('sync:state_updated', { entity: 'customers' });
-    res.status(201).json({ customer });
+    res.status(201).json({ customer: { ...customer, contactName, phone, address, notes } });
   });
 
   app.post('/api/customers/:id/payments', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
@@ -797,7 +931,7 @@ async function bootstrap() {
       const existingKeys = new Set(
         db.customers
           .filter((c) => !c.mergedIntoCustomerId)
-          .map((c) => `${normalizeCustomerName(c.businessName)}|${normalizePhone(c.phone)}`)
+          .map((c) => `${normalizeCustomerName(c.businessName)}|${normalizePhone(revealSensitive(c.phone))}`)
       );
 
       for (const r of rows) {
@@ -817,10 +951,10 @@ async function bootstrap() {
         db.customers.push({
           id: `cust-${crypto.randomUUID()}`,
           businessName,
-          contactName,
-          phone,
-          address,
-          notes,
+          contactName: protectSensitive(contactName),
+          phone: protectSensitive(phone),
+          address: protectSensitive(address),
+          notes: protectSensitive(notes),
           active: true,
           createdByUserId: req.user!.sub,
           mergedIntoCustomerId: null,
@@ -1029,10 +1163,10 @@ async function bootstrap() {
         customer = {
           id: `cust-${crypto.randomUUID()}`,
           businessName: newCustomerName,
-          contactName: 'Cliente de bodega',
-          phone: newCustomerPhone,
-          address: 'Compra directa en bodega',
-          notes: '',
+          contactName: protectSensitive('Cliente de bodega'),
+          phone: protectSensitive(newCustomerPhone),
+          address: protectSensitive('Compra directa en bodega'),
+          notes: protectSensitive(''),
           active: true,
           createdByUserId: req.user!.sub,
           mergedIntoCustomerId: null,
@@ -1247,6 +1381,15 @@ async function bootstrap() {
       return;
     }
 
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
+    const authorizedDevice = isOwnerSim
+      ? null
+      : db.devices.find((device) => device.id === deviceId && device.userId === vendor.id && device.active);
+    if (!isOwnerSim && !authorizedDevice) {
+      res.status(403).json({ error: 'Este teléfono no está autorizado por el dueño para sincronizar.' });
+      return;
+    }
+
     const incomingDeliveries = Array.isArray(req.body?.deliveries) ? req.body.deliveries : [];
     const incomingPayments = Array.isArray(req.body?.payments) ? req.body.payments : [];
     const incomingLosses = Array.isArray(req.body?.losses) ? req.body.losses : [];
@@ -1254,38 +1397,111 @@ async function bootstrap() {
 
     let acceptedDeliveries = 0;
     let skippedDuplicates = 0;
+    const acceptedDeliveryIds: string[] = [];
+    const acceptedPaymentIds: string[] = [];
+    const acceptedLossIds: string[] = [];
+    const acceptedIncidentIds: string[] = [];
     const nowUtc = new Date().toISOString();
 
     for (const rawDel of incomingDeliveries) {
       const delId = sanitizePlainText(rawDel.id, 80) || `del-${crypto.randomUUID()}`;
       if (db.deliveries.some((d) => d.id === delId)) {
         skippedDuplicates++;
+        acceptedDeliveryIds.push(delId);
         continue;
       }
 
       const customer = db.customers.find((c) => c.id === rawDel.customerId);
       if (!customer) continue;
 
+      let rawItems = Array.isArray(rawDel.items) ? rawDel.items.slice(0, 500) : [];
+      if (!rawItems.length && typeof rawDel.itemsSnapshotJson === 'string') {
+        try {
+          const parsedItems = JSON.parse(rawDel.itemsSnapshotJson);
+          if (Array.isArray(parsedItems)) rawItems = parsedItems.slice(0, 500);
+        } catch { /* malformed local snapshot is rejected below */ }
+      }
+      const items: DeliveryItem[] = rawItems.map((item: any, index: number) => {
+        const grossGrams = Number.isFinite(Number(item.grossGrams))
+          ? Math.round(Number(item.grossGrams))
+          : Math.round(Number(item.inputWeightKg ?? item.inputKg) * 1000);
+        const tareGrams = Number.isFinite(Number(item.tareGrams))
+          ? Math.round(Number(item.tareGrams))
+          : Math.round(Number(item.tareDeductionKg ?? item.tareKg) * 1000);
+        const netGrams = Number.isFinite(Number(item.netGrams))
+          ? Math.round(Number(item.netGrams))
+          : Math.round(Number(item.netWeightKg ?? item.netKg) * 1000);
+        const priceCentavosPerKg = Number.isFinite(Number(item.priceCentavosPerKg))
+          ? Math.round(Number(item.priceCentavosPerKg))
+          : Math.round(Number(item.pricePerKg ?? item.priceKg) * 100);
+        return {
+          id: sanitizePlainText(item.id, 80) || `item-${index + 1}`,
+          brand: sanitizePlainText(item.brand, 80),
+          modality: sanitizePlainText(item.modality, 40) || 'CAJA_COMPLETA',
+          boxesMilli: Math.round(Number(item.boxesMilli ?? Number(item.boxesDecimal ?? item.boxes ?? 1) * 1000)),
+          grossGrams,
+          tareGrams,
+          netGrams,
+          priceCentavosPerKg,
+          subtotalMilliCentavos: netGrams * priceCentavosPerKg,
+        };
+      }).filter((item: DeliveryItem) =>
+        Number.isSafeInteger(item.boxesMilli) && item.boxesMilli > 0 && item.boxesMilli <= 5_000_000 &&
+        item.grossGrams > 0 && item.grossGrams <= 200_000 &&
+        item.tareGrams >= 0 && item.netGrams > 0 && item.netGrams <= item.grossGrams &&
+        item.priceCentavosPerKg > 0 && item.priceCentavosPerKg <= 50_000
+      );
       const boxesGrams: number[] = Array.isArray(rawDel.boxesGrams)
         ? rawDel.boxesGrams.slice(0, 500).map((g: unknown) => Math.round(Number(g)))
         : [];
-      if (
-        boxesGrams.length === 0 ||
-        boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)
-      ) {
-        continue;
-      }
-
       const priceCentavosPerKg = Math.round(Number(rawDel.priceCentavosPerKg));
-      if (!Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0 || priceCentavosPerKg > 50_000) {
-        continue;
-      }
+      const rawSugar = rawDel.sugar && typeof rawDel.sugar === 'object'
+        ? rawDel.sugar
+        : Number(rawDel.sugarSacks) > 0
+          ? { sacks: rawDel.sugarSacks, weightPerSackKg: rawDel.sugarSackWeightKg, pricePerSackMxn: rawDel.sugarPricePerSackMxn }
+          : null;
+      const sugarSacksMilli = Math.round(Number(rawSugar?.sacksMilli ?? Number(rawSugar?.sacks ?? 0) * 1000));
+      const sugarWeightPerSackGrams = Math.round(Number(rawSugar?.weightPerSackGrams ?? Number(rawSugar?.weightPerSackKg ?? 0) * 1000));
+      const sugarPricePerSackCentavos = Math.round(Number(rawSugar?.pricePerSackCentavos ?? Number(rawSugar?.pricePerSackMxn ?? 0) * 100));
+      const sugarMilliCentavos = sugarSacksMilli * sugarPricePerSackCentavos;
+      const sugarGrams = Math.round(sugarSacksMilli * sugarWeightPerSackGrams / 1000);
+      const sugar = sugarSacksMilli > 0 && sugarWeightPerSackGrams > 0 && sugarPricePerSackCentavos > 0
+        ? {
+            sacksMilli: sugarSacksMilli,
+            weightPerSackGrams: sugarWeightPerSackGrams,
+            pricePerSackCentavos: sugarPricePerSackCentavos,
+            subtotalMilliCentavos: sugarMilliCentavos,
+            subtotalCentavos: Math.floor(sugarMilliCentavos / 1000 + 0.5),
+          }
+        : undefined;
+      if (rawSugar && !sugar) continue;
       let calc;
       try {
-        calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
+        if (items.length || sugar) {
+          calc = calculateDeliveryItemsTotals(
+            items,
+            sugar?.subtotalMilliCentavos ?? 0,
+            sugarGrams,
+          );
+        } else {
+          if (boxesGrams.length === 0 ||
+              boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000) ||
+              !Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0 || priceCentavosPerKg > 50_000) continue;
+          calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
+        }
       } catch {
         continue;
       }
+
+      const requestedFolioNumber = Number(rawDel.folioNumber);
+      const assignedFolioBlock = !isOwnerSim && authorizedDevice
+        ? authorizedDevice.folioBlocks?.find((block) =>
+            block.series === vendor.folioSeries &&
+            Number.isInteger(requestedFolioNumber) &&
+            requestedFolioNumber >= block.start && requestedFolioNumber <= block.end &&
+            !block.usedNumbers.includes(requestedFolioNumber))
+        : undefined;
+      if (!isOwnerSim && !assignedFolioBlock) continue;
 
       const folioInfo =
         Number.isInteger(rawDel.folioNumber) &&
@@ -1308,28 +1524,36 @@ async function bootstrap() {
         vendorId: vendor.id,
         vendorName: vendor.name,
         workdayId: sanitizePlainText(rawDel.workdayId, 60) || `wd-${vendor.id}`,
-        driverName: sanitizePlainText(rawDel.driverName, 80) || 'Chofer de ruta',
+        driverName: sanitizePlainText(rawDel.driverName ?? rawDel.routeDriverName, 80) || 'Chofer de ruta',
         helpersNames: Array.isArray(rawDel.helpersNames)
           ? rawDel.helpersNames.map((h: unknown) => sanitizePlainText(h, 60))
-          : [],
+          : sanitizePlainText(rawDel.routeHelperName, 60) ? [sanitizePlainText(rawDel.routeHelperName, 60)] : [],
         series: vendor.folioSeries,
         folioNumber: folioInfo.folioNumber,
         folioFormatted: folioInfo.folioFormatted,
         customerId: customer.id,
         customerName: customer.businessName,
         createdAtUtc: sanitizePlainText(rawDel.createdAtUtc, 40) || nowUtc,
-        priceCentavosPerKg,
+        priceCentavosPerKg: items[0]?.priceCentavosPerKg ?? priceCentavosPerKg,
         isSpecialPrice: Boolean(rawDel.isSpecialPrice),
         totalGrams: calc.totalGrams,
         calculatedTotalExactMilliCentavos: calc.calculatedExactMilliCentavos,
         totalToChargeCentavos: calc.totalToChargeCentavos,
+        paymentTerm: rawDel.paymentTerm === 'CREDITO' || rawDel.paymentMethod === 'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
+        ...(items.length ? { items } : {}),
+        ...(sugar ? { sugar } : {}),
+        ...(!isOwnerSim ? { reviewStatus: 'pendiente' as const, reviewNote: null } : {}),
         status: 'vigente',
         cancellationReason: null,
         syncedAtUtc: nowUtc,
       };
       db.deliveries.unshift(delivery);
+      if (assignedFolioBlock) assignedFolioBlock.usedNumbers.push(folioInfo.folioNumber);
 
-      boxesGrams.forEach((wg, i) => {
+      const syncedBoxWeights = items.length ? items.map((item) => item.grossGrams) : boxesGrams;
+      syncedBoxWeights.forEach((wg, i) => {
         const box: DeliveryBox = {
           id: `box-${crypto.randomUUID()}`,
           deliveryId: delivery.id,
@@ -1344,10 +1568,10 @@ async function bootstrap() {
           id: `evt-${crypto.randomUUID()}`,
           deliveryId: delivery.id,
           eventType: 'creacion',
-          detail: `Entrega ${delivery.folioFormatted} registrada (${boxesGrams.length} cajas)`,
+          detail: `Entrega ${delivery.folioFormatted} registrada (${syncedBoxWeights.length} pesajes)`,
           actorUserId: vendor.id,
           actorName: vendor.name,
-          deviceId: sanitizePlainText(req.body?.deviceId, 80) || 'android-app',
+          deviceId: deviceId || 'owner-simulation',
           occurredAtUtc: delivery.createdAtUtc,
           arrivedAtServerUtc: nowUtc,
         },
@@ -1358,17 +1582,18 @@ async function bootstrap() {
           detail: 'Sincronizado en tiempo real hacia backend y Windows',
           actorUserId: vendor.id,
           actorName: vendor.name,
-          deviceId: sanitizePlainText(req.body?.deviceId, 80) || 'android-app',
+          deviceId: deviceId || 'owner-simulation',
           occurredAtUtc: nowUtc,
           arrivedAtServerUtc: nowUtc,
         }
       );
       acceptedDeliveries++;
+      acceptedDeliveryIds.push(delivery.id);
     }
 
     for (const rawPay of incomingPayments) {
       const payId = sanitizePlainText(rawPay.id, 80) || `pay-${crypto.randomUUID()}`;
-      if (db.payments.some((p) => p.id === payId)) continue;
+      if (db.payments.some((p) => p.id === payId)) { acceptedPaymentIds.push(payId); continue; }
       const method = rawPay.method === 'transferencia' ? 'transferencia' : 'efectivo';
       const amountCentavos = Math.round(Number(rawPay.amountCentavos));
       if (!Number.isInteger(amountCentavos) || amountCentavos <= 0 || amountCentavos > 100_000_000) continue;
@@ -1378,7 +1603,7 @@ async function bootstrap() {
       const deliveryId = rawPay.deliveryId ? sanitizePlainText(rawPay.deliveryId, 80) : null;
       if (deliveryId) {
         const linkedDel = db.deliveries.find((d) => d.id === deliveryId);
-        if (linkedDel && amountCentavos > linkedDel.totalToChargeCentavos) continue;
+        if (!linkedDel || amountCentavos > linkedDel.totalToChargeCentavos) continue;
       }
 
       db.payments.push({
@@ -1391,12 +1616,14 @@ async function bootstrap() {
         status: method === 'efectivo' ? 'verificado' : 'por_verificar',
         createdAtUtc: sanitizePlainText(rawPay.createdAtUtc, 40) || nowUtc,
         note: sanitizePlainText(rawPay.note, 160) || 'Cobro en ruta Android',
+        ...(!isOwnerSim ? { reviewStatus: 'pendiente' as const } : {}),
       });
+      acceptedPaymentIds.push(payId);
     }
 
     for (const rawLoss of incomingLosses) {
       const lossId = sanitizePlainText(rawLoss.id, 80) || `loss-${crypto.randomUUID()}`;
-      if (db.dailyLosses.some((l) => l.id === lossId)) continue;
+      if (db.dailyLosses.some((l) => l.id === lossId)) { acceptedLossIds.push(lossId); continue; }
       const lostGrams = Math.round(Number(rawLoss.lostGrams));
       const note = sanitizePlainText(rawLoss.note, 200);
       if (Number.isInteger(lostGrams) && lostGrams > 0 && lostGrams <= 5_000_000 && note) {
@@ -1408,14 +1635,19 @@ async function bootstrap() {
           dateYmd: getMexicoCityYmd(),
           lostGrams,
           note,
+          driverName: sanitizePlainText(rawLoss.driverName, 80),
+          helpersNames: Array.isArray(rawLoss.helpersNames)
+            ? rawLoss.helpersNames.slice(0, 5).map((name: unknown) => sanitizePlainText(name, 60))
+            : [],
           createdAtUtc: nowUtc,
         });
+        acceptedLossIds.push(lossId);
       }
     }
 
     for (const rawInc of incomingIncidents) {
       const incId = sanitizePlainText(rawInc.id, 80) || `inc-${crypto.randomUUID()}`;
-      if (db.moneyIncidents.some((i) => i.id === incId)) continue;
+      if (db.moneyIncidents.some((i) => i.id === incId)) { acceptedIncidentIds.push(incId); continue; }
       const amountCentavos = Math.round(Number(rawInc.amountCentavos));
       const description = sanitizePlainText(rawInc.description, 200);
       const allowedTypes = new Set(['perdida', 'robo', 'faltante', 'otro'] as const);
@@ -1431,15 +1663,22 @@ async function bootstrap() {
           relatedDeliveryId: null,
           relatedCustomerId: null,
           description,
-          peoplePresent: [vendor.name],
+          peoplePresent: [
+            vendor.name,
+            sanitizePlainText(rawInc.driverName, 80),
+            ...(Array.isArray(rawInc.helpersNames) ? rawInc.helpersNames.slice(0, 5).map((name: unknown) => sanitizePlainText(name, 60)) : []),
+          ].filter(Boolean),
           status: 'reportado',
           ownerNote: null,
         });
+        acceptedIncidentIds.push(incId);
       }
     }
 
     // Update vendor device lastSyncUtc
-    const activeDevice = db.devices.find((d) => d.userId === vendor.id && d.active);
+    const activeDevice = isOwnerSim
+      ? db.devices.find((d) => d.userId === vendor.id && d.active)
+      : authorizedDevice;
     if (activeDevice) {
       activeDevice.lastSyncUtc = nowUtc;
       activeDevice.pendingSyncCount = 0;
@@ -1452,7 +1691,10 @@ async function bootstrap() {
       acceptedDeliveries,
       skippedDuplicates,
     });
-    res.json({ ok: true, acceptedDeliveries, skippedDuplicates, syncedAtUtc: nowUtc });
+    const rejectedDeliveryIds = incomingDeliveries
+      .map((rawDel: any) => sanitizePlainText(rawDel?.id, 80))
+      .filter((id: string) => id && !acceptedDeliveryIds.includes(id));
+    res.json({ ok: true, acceptedDeliveries, skippedDuplicates, acceptedDeliveryIds, rejectedDeliveryIds, acceptedPaymentIds, acceptedLossIds, acceptedIncidentIds, syncedAtUtc: nowUtc });
   });
 
   app.get('/api/sync/pull', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -1460,13 +1702,33 @@ async function bootstrap() {
     const todayYmd = getMexicoCityYmd();
     const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
     const user = db.users.find((u) => u.id === req.user!.sub);
+    if (!user || user.status !== 'activa') {
+      res.status(403).json({ error: 'La cuenta no está activa.' });
+      return;
+    }
+    if (user.role === 'vendedor') {
+      const deviceId = sanitizePlainText(req.query.deviceId, 80);
+      const authorized = db.devices.some((device) => device.id === deviceId && device.userId === user.id && device.active);
+      if (!authorized) {
+        res.status(403).json({ error: 'Este teléfono no está autorizado por el dueño para sincronizar.' });
+        return;
+      }
+    }
 
     res.json({
       serverTimeUtc: new Date().toISOString(),
       accountStatus: user?.status ?? 'bloqueada',
       folioSeries: user?.folioSeries ?? null,
       dailyPrice: latestPrice ?? null,
-      customers: db.customers.filter((c) => !c.mergedIntoCustomerId && c.active),
+      customers: db.customers
+        .filter((c) => !c.mergedIntoCustomerId && c.active)
+        .map((customer) => ({
+          ...customer,
+          phone: revealSensitive(customer.phone),
+          contactName: revealSensitive(customer.contactName),
+          address: revealSensitive(customer.address),
+          notes: revealSensitive(customer.notes),
+        })),
       settings: {
         businessName: db.settings.businessName,
         slogan: db.settings.slogan,

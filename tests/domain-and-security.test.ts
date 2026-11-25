@@ -25,6 +25,10 @@ import {
   verifyPassword,
 } from '../server/security.ts';
 
+// Deterministic test-only secrets; production startup requires externally configured keys.
+process.env.JWT_SECRET ??= 'test-only-jwt-secret-with-at-least-32-characters';
+process.env.AES_ENCRYPTION_KEY ??= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
 describe('Casos de aceptación C1-C6 y R1-R5 (Documento Maestro)', () => {
   it('C1 & R1: 25.35 + 24.45 + 25.12 + 22.78 + 22.90 kg a $37 => 120.60 kg, $4,462.20 -> $4,462', () => {
     const res = calculateDeliveryTotals([25350, 24450, 25120, 22780, 22900], 3700);
