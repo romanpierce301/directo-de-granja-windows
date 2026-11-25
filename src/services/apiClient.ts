@@ -164,6 +164,7 @@ export class ApiClient {
   public async updateSettings(payload: {
     businessPhone?: string;
     businessAddress?: string;
+    profilePictureUrl?: string;
     reduceAnimations?: boolean;
     themeMode?: 'dark' | 'light';
   }) {

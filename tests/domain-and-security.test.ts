@@ -20,6 +20,7 @@ import {
   encryptSensitive,
   hashPassword,
   sanitizePlainText,
+  sanitizeProfileImageDataUrl,
   signJwt,
   verifyJwt,
   verifyPassword,
@@ -195,7 +196,9 @@ describe('Seguridad Red Team: Excel Injection (X2/X3), JWT, Cifrado AES-256-GCM 
     expect(cipher).not.toContain('5512345678');
     expect(decryptSensitive(cipher)).toBe('5512345678');
 
-    const tampered = cipher.slice(0, -2) + 'ff';
+    const parts = cipher.split(':');
+    parts[1] = '00' + parts[1].slice(2);
+    const tampered = parts.join(':');
     expect(() => decryptSensitive(tampered)).toThrow();
   });
 
@@ -221,6 +224,24 @@ describe('Seguridad Red Team: Excel Injection (X2/X3), JWT, Cifrado AES-256-GCM 
       'scriptalert(1)/scriptAbarrotes'
     );
   });
+
+  it('Imagen de perfil: acepta PNG/JPG/WEBP base64 (> 600 chars) y rechaza SVG XSS o URLs maliciosas', () => {
+    const validLongPng = `data:image/png;base64,${'A'.repeat(1200)}`;
+    const okRes = sanitizeProfileImageDataUrl(validLongPng);
+    expect(okRes.ok).toBe(true);
+    if (okRes.ok) {
+      expect(okRes.value.length).toBe(validLongPng.length);
+    }
+
+    expect(sanitizeProfileImageDataUrl('')).toEqual({ ok: true, value: '' });
+    expect(sanitizeProfileImageDataUrl('data:image/svg+xml;base64,PHN2Zz4=')).toMatchObject({
+      ok: false,
+    });
+    expect(sanitizeProfileImageDataUrl('javascript:alert(1)')).toMatchObject({ ok: false });
+    expect(sanitizeProfileImageDataUrl(`data:image/jpeg;base64,${'A'.repeat(1_900_000)}`)).toMatchObject({
+      ok: false,
+    });
+  });
 });
 
 describe('Bodega: Tortón/Tráiler, Inventario por Marca y Descuento por Venta Directa', () => {
@@ -228,6 +249,9 @@ describe('Bodega: Tortón/Tráiler, Inventario por Marca y Descuento por Venta D
     const shipments: WarehouseShipment[] = [
       {
         id: 'shp-1',
+        series: 'E',
+        folioNumber: 1,
+        folioFormatted: 'E-0001',
         vehicleType: 'torton',
         referenceCode: 'REM-101',
         originFarm: 'Granja Norte',
@@ -249,6 +273,9 @@ describe('Bodega: Tortón/Tráiler, Inventario por Marca y Descuento por Venta D
       },
       {
         id: 'shp-2',
+        series: 'E',
+        folioNumber: 2,
+        folioFormatted: 'E-0002',
         vehicleType: 'trailer',
         referenceCode: 'REM-102',
         originFarm: 'Granja Sur',

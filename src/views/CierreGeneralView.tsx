@@ -63,10 +63,10 @@ export function CierreGeneralView({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+        <h2 className="text-xl font-bold text-[#130824] dark:text-[#F4EFFF]">
           Cierre general y arqueo por vendedor
         </h2>
-        <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+        <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2] mt-0.5">
           Efectivo cobrado menos incidentes registrados da el efectivo a entregar · Cualquier faltante queda como diferencia sin explicar
         </p>
       </div>
@@ -77,14 +77,14 @@ export function CierreGeneralView({
           className="lg:col-span-5 glass-panel rounded-lg p-5 space-y-4"
         >
           <div className="flex items-center gap-2">
-            <Calculator className="w-4 h-4 text-[#1d63ff]" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            <Calculator className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC]" />
+            <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
               Calcular y registrar cierre
             </h3>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#6B5B82] dark:text-[#D9CEEE] mb-1">
               Vendedor
             </label>
             <select
@@ -101,48 +101,52 @@ export function CierreGeneralView({
           </div>
 
           {preview && (
-            <div className="rounded-md bg-slate-100/80 dark:bg-[#0d121c] p-3.5 space-y-2 text-xs font-mono tabular-nums">
+            <div className="pos-subpanel rounded-md p-3.5 space-y-2 text-xs font-mono tabular-nums">
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Vendido (entregas vigentes)</span>
-                <span className="font-bold text-slate-900 dark:text-white">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Vendido (entregas vigentes)</span>
+                <span className="font-bold text-[#130824] dark:text-[#F4EFFF]">
                   {formatCurrencyFromCentavos(preview.soldCentavos)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Cobrado efectivo</span>
-                <span className="text-[#2E9B5B] dark:text-[#00f076]">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Cobrado efectivo</span>
+                <span className="text-[#059669] dark:text-[#10B981]">
                   {formatCurrencyFromCentavos(preview.cashCollectedCentavos)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Transferencias verificadas</span>
-                <span>{formatCurrencyFromCentavos(preview.transferVerifiedCentavos)}</span>
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Transferencias verificadas</span>
+                <span className="text-[#130824] dark:text-[#F4EFFF]">
+                  {formatCurrencyFromCentavos(preview.transferVerifiedCentavos)}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Transferencias por verificar</span>
-                <span className="text-[#1E5FBF] dark:text-[#b5c4ff]">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Transferencias por verificar</span>
+                <span className="text-[#D97706] dark:text-[#F59E0B]">
                   {formatCurrencyFromCentavos(preview.transferPendingCentavos)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Por cobrar (saldo)</span>
-                <span className="text-[#D64545] dark:text-[#ff334b]">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Por cobrar (saldo)</span>
+                <span className="text-[#E11D48] dark:text-[#F43F5E]">
                   {formatCurrencyFromCentavos(preview.totalReceivableCentavos)}
                 </span>
               </div>
-              <div className="border-t border-slate-200 dark:border-white/10 pt-2 flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">Merma del día (informativa)</span>
-                <span>{formatKgFromGrams(preview.dailyLossGrams)}</span>
+              <div className="border-t border-[#DFD7EE] dark:border-[#341961] pt-2 flex justify-between">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">Merma del día (informativa)</span>
+                <span className="text-[#D97706] dark:text-[#F59E0B]">
+                  {formatKgFromGrams(preview.dailyLossGrams)}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600 dark:text-[#c3c5d8]">(-) Incidentes de dinero</span>
-                <span className="text-[#D64545] dark:text-[#ff334b]">
+                <span className="text-[#4B3969] dark:text-[#D9CEEE]">(-) Incidentes de dinero</span>
+                <span className="text-[#E11D48] dark:text-[#F43F5E]">
                   -{formatCurrencyFromCentavos(preview.incidentsCentavos)}
                 </span>
               </div>
-              <div className="border-t border-slate-200 dark:border-white/10 pt-2 flex justify-between text-sm font-bold">
-                <span className="text-slate-900 dark:text-white">Efectivo a entregar</span>
-                <span className="text-[#1E5FBF] dark:text-[#71ffe5]">
+              <div className="border-t border-[#DFD7EE] dark:border-[#341961] pt-2 flex justify-between text-sm font-bold">
+                <span className="text-[#130824] dark:text-[#F4EFFF]">Efectivo a entregar</span>
+                <span className="text-[#7C3AED] dark:text-[#C084FC]">
                   {formatCurrencyFromCentavos(preview.expectedCashToDeliverCentavos)}
                 </span>
               </div>
@@ -150,7 +154,7 @@ export function CierreGeneralView({
           )}
 
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#6B5B82] dark:text-[#D9CEEE] mb-1">
               Efectivo físico recibido del vendedor ($ MXN)
             </label>
             <input
@@ -169,8 +173,8 @@ export function CierreGeneralView({
             <div
               className={`rounded px-3 py-2 text-xs font-mono flex justify-between font-bold ${
                 preview.unexplainedDifferenceCentavos === 0
-                  ? 'bg-[#2E9B5B]/15 text-[#2E9B5B] dark:text-[#00f076]'
-                  : 'bg-[#D64545]/15 text-[#D64545] dark:text-[#ffb4ab]'
+                  ? 'bg-[#10B981]/15 border border-[#10B981]/35 text-[#059669] dark:text-[#10B981]'
+                  : 'bg-[#F43F5E]/15 border border-[#F43F5E]/35 text-[#E11D48] dark:text-[#F43F5E]'
               }`}
             >
               <span>Diferencia sin explicar:</span>
@@ -191,15 +195,15 @@ export function CierreGeneralView({
         </form>
 
         <div className="lg:col-span-7 glass-panel rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+          <div className="px-4 py-3 border-b border-[#DFD7EE] dark:border-[#341961]">
+            <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
               Cierres registrados
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#8d90a2]">
+                <tr className="border-b border-[#DFD7EE] dark:border-[#341961] text-[#6B5B82] dark:text-[#9E8FB2]">
                   <th className="py-2.5 px-4 font-semibold">Vendedor / Fecha</th>
                   <th className="py-2.5 px-3 font-semibold text-right">Vendido</th>
                   <th className="py-2.5 px-3 font-semibold text-right">A entregar</th>
@@ -207,39 +211,39 @@ export function CierreGeneralView({
                   <th className="py-2.5 px-4 font-semibold text-right">Diferencia</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200/70 dark:divide-white/5">
+              <tbody className="divide-y divide-[#DFD7EE]/80 dark:divide-[#341961]">
                 {state.cashClosings.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-500 dark:text-[#8d90a2]">
+                    <td colSpan={5} className="py-10 text-center text-[#6B5B82] dark:text-[#9E8FB2]">
                       Aún no se han guardado cierres de caja hoy.
                     </td>
                   </tr>
                 ) : (
                   state.cashClosings.map((c) => (
-                    <tr key={c.id} className="hover:bg-[#1d63ff]/5">
+                    <tr key={c.id} className="hover:bg-[#8A2BE2]/8">
                       <td className="py-2.5 px-4">
-                        <div className="font-semibold text-slate-900 dark:text-white">
+                        <div className="font-semibold text-[#130824] dark:text-[#F4EFFF]">
                           {c.vendorName}
                         </div>
-                        <div className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                        <div className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
                           {c.dateYmd} · {formatMexicoCityDate(c.closedAtUtc)}{' '}
                           {formatMexicoCityTime(c.closedAtUtc)}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#3B2A54] dark:text-[#D9CEEE]">
                         {formatCurrencyFromCentavos(c.soldCentavos)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold">
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold text-[#130824] dark:text-[#F4EFFF]">
                         {formatCurrencyFromCentavos(c.expectedCashToDeliverCentavos)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#3B2A54] dark:text-[#D9CEEE]">
                         {formatCurrencyFromCentavos(c.actualCashHandedInCentavos)}
                       </td>
                       <td
                         className={`py-2.5 px-4 text-right font-mono tabular-nums font-bold ${
                           c.unexplainedDifferenceCentavos === 0
-                            ? 'text-[#2E9B5B] dark:text-[#00f076]'
-                            : 'text-[#D64545] dark:text-[#ff334b]'
+                            ? 'text-[#059669] dark:text-[#10B981]'
+                            : 'text-[#E11D48] dark:text-[#F43F5E]'
                         }`}
                       >
                         {formatCurrencyFromCentavos(c.unexplainedDifferenceCentavos)}

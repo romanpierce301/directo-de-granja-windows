@@ -131,3 +131,28 @@ export function sanitizePlainText(input: unknown, maxLen = 240): string {
     .trim()
     .slice(0, maxLen);
 }
+
+const MAX_PROFILE_IMAGE_DATA_URL_LEN = 1_800_000;
+const RASTER_DATA_URL_REGEX = /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+export function sanitizeProfileImageDataUrl(
+  input: unknown
+): { ok: true; value: string } | { ok: false; error: string } {
+  if (typeof input !== 'string') {
+    return { ok: false, error: 'La imagen de perfil debe ser una cadena de texto válida.' };
+  }
+  const trimmed = input.trim();
+  if (trimmed === '') {
+    return { ok: true, value: '' };
+  }
+  if (trimmed.length > MAX_PROFILE_IMAGE_DATA_URL_LEN) {
+    return { ok: false, error: 'La imagen seleccionada excede el tamaño máximo permitido (1.2 MB).' };
+  }
+  if (!RASTER_DATA_URL_REGEX.test(trimmed)) {
+    return {
+      ok: false,
+      error: 'Solo se permiten imágenes PNG, JPG o WEBP codificadas en base64.',
+    };
+  }
+  return { ok: true, value: trimmed };
+}

@@ -35,6 +35,7 @@ import {
   requireAuth,
   requireRole,
   sanitizePlainText,
+  sanitizeProfileImageDataUrl,
   signJwt,
   verifyJwt,
   verifyPassword,
@@ -89,6 +90,11 @@ async function bootstrap() {
         return;
       }
       const claims = verifyJwt(token);
+      const user = store.getRawUsers().find((u) => u.id === claims.sub);
+      if (!user || user.status !== 'activa') {
+        ws.close(4003, 'Cuenta inactiva o bloqueada');
+        return;
+      }
       const client = { ws, userId: claims.sub, role: claims.role };
       wsClients.add(client);
 
@@ -891,6 +897,14 @@ async function bootstrap() {
     if (req.body?.themeMode === 'dark' || req.body?.themeMode === 'light') {
       db.settings.themeMode = req.body.themeMode;
     }
+    if (typeof req.body?.profilePictureUrl !== 'undefined') {
+      const imgCheck = sanitizeProfileImageDataUrl(req.body.profilePictureUrl);
+      if (!imgCheck.ok) {
+        res.status(400).json({ error: imgCheck.error });
+        return;
+      }
+      db.settings.profilePictureUrl = imgCheck.value;
+    }
     store.addAudit(
       'settings',
       'global',
@@ -906,8 +920,13 @@ async function bootstrap() {
 
   // Proactive Alerts Acknowledge
   app.post('/api/monitoring/alerts/:id/ack', requireAuth, requireRole('dueno'), (req, res) => {
-    store.acknowledgeAlert(req.params.id);
-    broadcastEvent('alert:acknowledged', { alertId: req.params.id });
+    const alertId = sanitizePlainText(req.params.id, 120);
+    if (!alertId) {
+      res.status(400).json({ error: 'Identificador de alerta inválido.' });
+      return;
+    }
+    store.acknowledgeAlert(alertId);
+    broadcastEvent('alert:acknowledged', { alertId });
     res.json({ ok: true });
   });
 
@@ -963,8 +982,12 @@ async function bootstrap() {
 
     const db = store.getDb();
     const nowUtc = new Date().toISOString();
+    const folioInfo = store.reserveNextFolio('E');
     const shipment: WarehouseShipment = {
       id: shipmentId,
+      series: 'E',
+      folioNumber: folioInfo.folioNumber,
+      folioFormatted: folioInfo.folioFormatted,
       vehicleType,
       referenceCode: referenceCode || `VIAJE-${db.warehouseShipments.length + 1}`,
       originFarm,
@@ -1247,10 +1270,18 @@ async function bootstrap() {
       return;
     }
 
-    const incomingDeliveries = Array.isArray(req.body?.deliveries) ? req.body.deliveries : [];
-    const incomingPayments = Array.isArray(req.body?.payments) ? req.body.payments : [];
-    const incomingLosses = Array.isArray(req.body?.losses) ? req.body.losses : [];
-    const incomingIncidents = Array.isArray(req.body?.incidents) ? req.body.incidents : [];
+    const incomingDeliveries = Array.isArray(req.body?.deliveries)
+      ? req.body.deliveries.slice(0, 500)
+      : [];
+    const incomingPayments = Array.isArray(req.body?.payments)
+      ? req.body.payments.slice(0, 500)
+      : [];
+    const incomingLosses = Array.isArray(req.body?.losses)
+      ? req.body.losses.slice(0, 200)
+      : [];
+    const incomingIncidents = Array.isArray(req.body?.incidents)
+      ? req.body.incidents.slice(0, 200)
+      : [];
 
     let acceptedDeliveries = 0;
     let skippedDuplicates = 0;
@@ -1263,8 +1294,13 @@ async function bootstrap() {
         continue;
       }
 
-      const customer = db.customers.find((c) => c.id === rawDel.customerId);
-      if (!customer) continue;
+      let customer = db.customers.find((c) => c.id === rawDel.customerId);
+      const seenCustIds = new Set<string>();
+      while (customer && customer.mergedIntoCustomerId && !seenCustIds.has(customer.id)) {
+        seenCustIds.add(customer.id);
+        customer = db.customers.find((c) => c.id === customer!.mergedIntoCustomerId);
+      }
+      if (!customer || customer.mergedIntoCustomerId) continue;
 
       const boxesGrams: number[] = Array.isArray(rawDel.boxesGrams)
         ? rawDel.boxesGrams.slice(0, 500).map((g: unknown) => Math.round(Number(g)))
@@ -1303,6 +1339,9 @@ async function bootstrap() {
         continue;
       }
 
+      const rawBrandName = sanitizePlainText(rawDel.brandName, 80);
+      const brandKey = rawBrandName ? normalizeBrandName(rawBrandName) : undefined;
+
       const delivery: Delivery = {
         id: delId,
         vendorId: vendor.id,
@@ -1326,6 +1365,10 @@ async function bootstrap() {
         status: 'vigente',
         cancellationReason: null,
         syncedAtUtc: nowUtc,
+        sourceType: 'ruta',
+        brandKey,
+        brandName: rawBrandName || undefined,
+        boxesCount: boxesGrams.length,
       };
       db.deliveries.unshift(delivery);
 
@@ -1374,11 +1417,15 @@ async function bootstrap() {
       if (!Number.isInteger(amountCentavos) || amountCentavos <= 0 || amountCentavos > 100_000_000) continue;
 
       const customerId = sanitizePlainText(rawPay.customerId, 80);
-      if (!db.customers.some((c) => c.id === customerId)) continue;
+      if (!db.customers.some((c) => c.id === customerId && !c.mergedIntoCustomerId)) continue;
       const deliveryId = rawPay.deliveryId ? sanitizePlainText(rawPay.deliveryId, 80) : null;
       if (deliveryId) {
         const linkedDel = db.deliveries.find((d) => d.id === deliveryId);
-        if (linkedDel && amountCentavos > linkedDel.totalToChargeCentavos) continue;
+        if (!linkedDel || linkedDel.customerId !== customerId || linkedDel.status === 'cancelada') continue;
+        const alreadyPaid = db.payments
+          .filter((p) => p.deliveryId === deliveryId)
+          .reduce((acc, p) => acc + p.amountCentavos, 0);
+        if (alreadyPaid + amountCentavos > linkedDel.totalToChargeCentavos) continue;
       }
 
       db.payments.push({
@@ -1461,10 +1508,18 @@ async function bootstrap() {
     const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
     const user = db.users.find((u) => u.id === req.user!.sub);
 
+    if (!user || user.status !== 'activa') {
+      res.status(403).json({
+        error: 'Cuenta inactiva o bloqueada por el dueño.',
+        accountStatus: user?.status ?? 'bloqueada',
+      });
+      return;
+    }
+
     res.json({
       serverTimeUtc: new Date().toISOString(),
-      accountStatus: user?.status ?? 'bloqueada',
-      folioSeries: user?.folioSeries ?? null,
+      accountStatus: user.status,
+      folioSeries: user.folioSeries ?? null,
       dailyPrice: latestPrice ?? null,
       customers: db.customers.filter((c) => !c.mergedIntoCustomerId && c.active),
       settings: {

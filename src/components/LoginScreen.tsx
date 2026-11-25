@@ -26,27 +26,34 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0d14] text-[#e1e2ec] p-6">
-      <div className="glass-panel w-full max-w-md rounded-lg p-7">
-        <div className="flex items-center gap-4">
-          <div className="w-24 h-16 rounded-lg overflow-hidden bg-[#0b0e15] border border-white/15 shrink-0 flex items-center justify-center shadow">
-            <img
-              src="/assets/aistudio/Gemini_Generated_Image_13e89c53.jpeg"
-              alt="Directo de Granja"
-              className="w-full h-full object-cover object-center"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">Directo de Granja</h1>
-            <p className="text-xs text-[#71ffe5]">«Te faltan huevos a nosotros nos sobran»</p>
-            <p className="mt-1 text-xs text-[#8d90a2]">Aplicación de Windows · Acceso exclusivo para el dueño</p>
-          </div>
+    <div className="relative min-h-screen flex items-center justify-center bg-[#090312] text-[#F4EFFF] p-6 overflow-hidden">
+      {/* Blurred background image behind login card */}
+      <img
+        src="/assets/aistudio/Gemini_Generated_Image_13e89c53.jpeg"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center blur-md scale-105"
+        referrerPolicy="no-referrer"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 40%, rgba(26, 11, 51, 0.55) 0%, rgba(9, 3, 18, 0.78) 100%)',
+        }}
+      />
+
+      <div className="relative z-10 glass-panel w-full max-w-md rounded-lg p-7">
+        <div>
+          <h1 className="text-xl font-bold text-[#F4EFFF]">Directo de Granja</h1>
+          <p className="text-xs text-[#C084FC] font-medium">«Te faltan huevos a nosotros nos sobran»</p>
+          <p className="mt-1 text-xs text-[#9E8FB2]">Aplicación de Windows · Acceso exclusivo para el dueño</p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#c3c5d8] mb-1.5">
+            <label className="block text-xs font-medium text-[#F4EFFF] mb-1.5">
               Correo de cuenta (Rol Dueño)
             </label>
             <input
@@ -60,7 +67,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[#c3c5d8] mb-1.5">
+            <label className="block text-xs font-medium text-[#F4EFFF] mb-1.5">
               Contraseña cifrada
             </label>
             <div className="relative">
@@ -72,12 +79,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 className="input-recessed w-full rounded px-3 py-2 pr-9 text-sm"
                 placeholder="••••••••"
               />
-              <Lock className="w-4 h-4 text-[#8d90a2] absolute right-3 top-2.5" />
+              <Lock className="w-4 h-4 text-[#9E8FB2] absolute right-3 top-2.5" />
             </div>
           </div>
 
           {error && (
-            <div className="rounded border border-[#D64545]/60 bg-[#D64545]/15 px-3 py-2 text-xs text-[#ffb4ab]">
+            <div className="rounded border border-[#F43F5E]/60 bg-[#F43F5E]/15 px-3 py-2 text-xs text-[#F4EFFF]">
               {error}
             </div>
           )}
@@ -96,8 +103,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         </form>
 
-        <div className="mt-5 pt-4 border-t border-white/10 flex items-start gap-2.5 text-xs text-[#8d90a2]">
-          <ShieldCheck className="w-4 h-4 text-[#00f076] shrink-0 mt-0.5" />
+        <div className="mt-5 pt-4 border-t border-[#341961] flex items-start gap-2.5 text-xs text-[#9E8FB2]">
+          <ShieldCheck className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
           <p>
             Sesión protegida con JWT HS256 (expira en 8 horas) y contraseñas cifradas con bcrypt. No se guardan contraseñas en el equipo.
           </p>

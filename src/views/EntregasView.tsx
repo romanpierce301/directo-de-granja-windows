@@ -163,10 +163,10 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+          <h2 className="text-xl font-bold text-[#130824] dark:text-[#F4EFFF]">
             Entregas, bitácora y ticket térmico 48mm
           </h2>
-          <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+          <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2] mt-0.5">
             Registros inmutables: una entrega confirmada nunca se borra ni edita en silencio; la cancelación conserva el folio
           </p>
         </div>
@@ -174,7 +174,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#7A6B8F] dark:text-[#9E8FB2] absolute left-2.5 top-2.5" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -217,7 +217,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-[#8d90a2]">
+                <tr className="border-b border-[#DFD7EE] dark:border-[#341961] text-[#6B5B82] dark:text-[#9E8FB2]">
                   <th className="py-2.5 px-3 font-semibold">Folio</th>
                   <th className="py-2.5 px-3 font-semibold">Cliente</th>
                   <th className="py-2.5 px-3 font-semibold">Vendedor</th>
@@ -226,10 +226,10 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                   <th className="py-2.5 px-3 font-semibold text-right">Estado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200/70 dark:divide-white/5">
+              <tbody className="divide-y divide-[#DFD7EE]/80 dark:divide-[#341961]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500 dark:text-[#8d90a2]">
+                    <td colSpan={6} className="py-8 text-center text-[#6B5B82] dark:text-[#9E8FB2]">
                       No hay entregas que coincidan con los filtros actuales.
                     </td>
                   </tr>
@@ -247,38 +247,38 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         }}
                         className={`cursor-pointer transition-colors ${
                           active
-                            ? 'bg-[#1d63ff]/15 dark:bg-[#1d63ff]/20'
-                            : 'hover:bg-[#1d63ff]/5'
+                            ? 'bg-[#8A2BE2]/15 dark:bg-[#8A2BE2]/25'
+                            : 'hover:bg-[#8A2BE2]/8'
                         }`}
                       >
-                        <td className="py-2.5 px-3 font-mono font-bold text-[#1E5FBF] dark:text-[#b5c4ff]">
+                        <td className="py-2.5 px-3 font-mono font-bold text-[#7C3AED] dark:text-[#C084FC]">
                           {del.folioFormatted}
                         </td>
                         <td className="py-2.5 px-3">
-                          <div className="font-semibold text-slate-900 dark:text-white">
+                          <div className="font-semibold text-[#130824] dark:text-[#F4EFFF]">
                             {del.customerName}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                          <div className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
                             {formatMexicoCityDate(del.createdAtUtc)}{' '}
                             {formatMexicoCityTime(del.createdAtUtc)}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-[#c3c5d8]">
+                        <td className="py-2.5 px-3 text-[#4B3969] dark:text-[#D9CEEE]">
                           {del.vendorName}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-800 dark:text-[#e1e2ec]">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#3B2A54] dark:text-[#D9CEEE]">
                           {formatKgFromGrams(del.totalGrams)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-[#130824] dark:text-[#F4EFFF]">
                           {formatCurrencyFromCentavos(del.totalToChargeCentavos)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           {del.status === 'vigente' ? (
-                            <span className="text-[#2E9B5B] dark:text-[#00f076] font-semibold">
+                            <span className="text-[#059669] dark:text-[#10B981] font-semibold">
                               Vigente
                             </span>
                           ) : (
-                            <span className="text-[#D64545] dark:text-[#ff334b] font-semibold">
+                            <span className="text-[#E11D48] dark:text-[#F43F5E] font-semibold">
                               Cancelada
                             </span>
                           )}
@@ -293,10 +293,10 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
 
           {/* Detail metadata, payments & immutable audit trail for selected delivery */}
           {selectedDelivery && (
-            <div className="border-t border-slate-200 dark:border-white/10 p-4 space-y-4">
+            <div className="border-t border-[#DFD7EE] dark:border-[#341961] p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-[#c3c5d8]">
-                  <Users className="w-4 h-4 text-[#1d63ff]" />
+                <div className="flex items-center gap-2 text-xs text-[#4B3969] dark:text-[#D9CEEE]">
+                  <Users className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC]" />
                   <span>
                     Equipo: <strong>{selectedDelivery.vendorName}</strong> · Chofer:{' '}
                     <strong>{selectedDelivery.driverName}</strong> · Chalanes:{' '}
@@ -326,8 +326,8 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               </div>
 
               {showCancelBox && (
-                <div className="rounded-md border border-[#D64545]/40 bg-[#D64545]/10 p-3 space-y-2">
-                  <label className="block text-xs font-semibold text-[#D64545] dark:text-[#ffb4ab]">
+                <div className="rounded-md border border-[#F43F5E]/40 bg-[#F43F5E]/10 p-3 space-y-2">
+                  <label className="block text-xs font-semibold text-[#E11D48] dark:text-[#FDA4AF]">
                     Motivo obligatorio de cancelación (se conservará el folio {selectedDelivery.folioFormatted}):
                   </label>
                   <div className="flex gap-2">
@@ -345,19 +345,19 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               )}
 
               {selectedDelivery.status === 'cancelada' && selectedDelivery.cancellationReason && (
-                <div className="rounded border border-[#D64545]/40 bg-[#D64545]/10 px-3 py-2 text-xs text-[#D64545] dark:text-[#ffb4ab]">
+                <div className="rounded border border-[#F43F5E]/40 bg-[#F43F5E]/10 px-3 py-2 text-xs text-[#E11D48] dark:text-[#FDA4AF]">
                   <strong>Motivo de cancelación:</strong> {selectedDelivery.cancellationReason}
                 </div>
               )}
 
               {/* Payments attached to delivery with 3D verify button */}
               <div className="space-y-2">
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-[#00e5c9]" />
+                <div className="text-xs font-bold text-[#130824] dark:text-[#F4EFFF] flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-[#059669] dark:text-[#10B981]" />
                   <span>Cobros registrados en esta entrega</span>
                 </div>
                 {selectedPayments.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2]">
+                  <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2]">
                     Entrega a crédito (sin cobro inicial).
                   </p>
                 ) : (
@@ -365,18 +365,18 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                     {selectedPayments.map((p) => (
                       <div
                         key={p.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2 text-xs"
+                        className="pos-subpanel flex flex-wrap items-center justify-between gap-2 rounded px-3 py-2 text-xs"
                       >
                         <div>
-                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                          <span className="font-mono font-bold text-[#130824] dark:text-[#F4EFFF]">
                             {formatCurrencyFromCentavos(p.amountCentavos)}
                           </span>
-                          <span className="mx-1.5 text-slate-400">·</span>
-                          <span className="capitalize text-slate-700 dark:text-[#c3c5d8]">
+                          <span className="mx-1.5 text-[#9E8FB2]">·</span>
+                          <span className="capitalize text-[#4B3969] dark:text-[#D9CEEE]">
                             {p.method}
                           </span>
-                          <span className="mx-1.5 text-slate-400">·</span>
-                          <span className="text-slate-500 dark:text-[#8d90a2]">{p.note}</span>
+                          <span className="mx-1.5 text-[#9E8FB2]">·</span>
+                          <span className="text-[#6B5B82] dark:text-[#9E8FB2]">{p.note}</span>
                         </div>
 
                         {p.method === 'transferencia' ? (
@@ -388,7 +388,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                               p.status === 'verificado' ? (
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                               ) : (
-                                <Clock className="w-3.5 h-3.5" />
+                                <Clock className="w-3.5 h-3.5 text-[#F59E0B]" />
                               )
                             }
                             onClick={() => handleVerifyTransfer(p.id)}
@@ -396,7 +396,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                             {p.status === 'verificado' ? 'Verificada' : 'Por verificar'}
                           </TactileButton>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[#2E9B5B] dark:text-[#00f076] font-medium">
+                          <span className="inline-flex items-center gap-1 text-[#059669] dark:text-[#10B981] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" /> Efectivo
                           </span>
                         )}
@@ -408,23 +408,23 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
 
               {/* Immutable Delivery Events Log */}
               <div className="space-y-2">
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-[#1d63ff]" />
+                <div className="text-xs font-bold text-[#130824] dark:text-[#F4EFFF] flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-[#8A2BE2] dark:text-[#C084FC]" />
                   <span>Historial interno de la entrega (Bitácora inmutable)</span>
                 </div>
                 <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
                   {selectedEvents.map((ev) => (
                     <div
                       key={ev.id}
-                      className="flex items-start justify-between gap-3 py-1 border-b border-slate-200/60 dark:border-white/5 last:border-0"
+                      className="flex items-start justify-between gap-3 py-1 border-b border-[#DFD7EE]/80 dark:border-[#341961] last:border-0"
                     >
                       <div>
-                        <span className="font-mono uppercase text-[10px] font-bold text-[#1E5FBF] dark:text-[#71ffe5] mr-2">
+                        <span className="font-mono uppercase text-[10px] font-bold text-[#7C3AED] dark:text-[#C084FC] mr-2">
                           {ev.eventType}
                         </span>
-                        <span className="text-slate-700 dark:text-[#c3c5d8]">{ev.detail}</span>
+                        <span className="text-[#4B3969] dark:text-[#D9CEEE]">{ev.detail}</span>
                       </div>
-                      <span className="font-mono text-[11px] text-slate-500 dark:text-[#8d90a2] whitespace-nowrap">
+                      <span className="font-mono text-[11px] text-[#6B5B82] dark:text-[#9E8FB2] whitespace-nowrap">
                         {formatMexicoCityDate(ev.occurredAtUtc)}{' '}
                         {formatMexicoCityTime(ev.occurredAtUtc)}
                       </span>
@@ -436,12 +436,12 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
           )}
         </div>
 
-        {/* Right Pane: Exact 48mm Thermal Ticket Template Integrated Directly */}
-        <div className="xl:col-span-5 glass-panel rounded-lg p-5">
+        {/* Right Pane: #130824 Ticket Frame surrounding untouched 48mm Thermal Ticket Template */}
+        <div className="xl:col-span-5 rounded-lg p-5 bg-white dark:bg-[#130824] border-t border-white dark:border-t-[#4C2889] border-x border-b border-[#DFD7EE] dark:border-[#2A134D]">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-[#1d63ff]" />
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              <FileText className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC]" />
+              <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
                 Plantilla oficial de ticket 48mm
               </h3>
             </div>
@@ -458,7 +458,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                   {showOfficialSample ? 'Ver entrega real' : 'Ver ejemplo oficial'}
                 </TactileButton>
               )}
-              <span className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+              <span className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
                 Ancho térmico 48mm
               </span>
             </div>
@@ -477,7 +477,7 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
             />
           ) : (
             <div className="space-y-3">
-              <div className="rounded border border-[#1E5FBF]/40 bg-[#1E5FBF]/10 px-3 py-2 text-[11px] text-[#1E5FBF] dark:text-[#71ffe5] text-center">
+              <div className="rounded border border-[#8A2BE2]/40 bg-[#8A2BE2]/10 px-3 py-2 text-[11px] text-[#681AB8] dark:text-[#C084FC] text-center">
                 Ejemplo visual oficial de plantilla 48mm (solo demostración visual; no afecta datos ni inventarios reales).
               </div>
               <Ticket48mm

@@ -101,6 +101,9 @@ export interface WarehouseShipmentLine {
 
 export interface WarehouseShipment {
   id: string;
+  series: string;
+  folioNumber: number;
+  folioFormatted: string;
   vehicleType: VehicleType;
   referenceCode: string;
   originFarm: string;
@@ -248,6 +251,7 @@ export interface AppSettings {
   slogan: string;
   businessPhone: string;
   businessAddress: string;
+  profilePictureUrl?: string;
   reduceAnimations: boolean;
   themeMode: 'dark' | 'light';
   nextFolioBySeries: Record<string, number>;

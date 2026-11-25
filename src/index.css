@@ -14,6 +14,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  html.dark, html.dark body {
+    background-color: #090312;
+    color: #F4EFFF;
+  }
+
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
   }
@@ -24,7 +29,17 @@
   }
 }
 
-/* Tactile 3D Windows Buttons (Degradado, borde superior claro, sombra inferior, efecto de hundirse) */
+/* Degradado radial sutil en el fondo (#1A0B33 en el centro -> #090312 en esquinas) */
+.pos-canvas {
+  background: radial-gradient(ellipse at 50% 32%, #1A0B33 0%, #0E051E 54%, #090312 100%);
+  color: #F4EFFF;
+}
+html:not(.dark) .pos-canvas {
+  background: radial-gradient(ellipse at 50% 32%, #FFFFFF 0%, #F4F1FA 60%, #ECE7F6 100%);
+  color: #130824;
+}
+
+/* Tactile 3D Windows POS Buttons (Borde superior de luz, cero lag por blur) */
 .btn-3d {
   position: relative;
   display: inline-flex;
@@ -50,137 +65,169 @@
   cursor: not-allowed;
 }
 
-/* Primary Electric Cobalt / Directo Azul */
+/* Acción Principal / Cobrar (#8A2BE2) */
 .btn-3d-primary {
-  background: linear-gradient(180deg, #2b72ff 0%, #1d63ff 55%, #1348c7 100%);
-  color: #f6f8ff;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 1px solid #09256e;
-  box-shadow: 0 3px 0 #0a2d82, 0 6px 14px rgba(15, 61, 122, 0.45);
+  background: linear-gradient(180deg, #9D48EE 0%, #8A2BE2 55%, #681AB8 100%);
+  color: #F4EFFF;
+  border-top: 1px solid rgba(244, 239, 255, 0.4);
+  border-left: 1px solid #4C2889;
+  border-right: 1px solid #4C2889;
+  border-bottom: 1px solid #3B0C6E;
+  box-shadow: 0 3px 0 #450E82;
 }
 .btn-3d-primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 .btn-3d-primary:active:not(:disabled) {
-  box-shadow: 0 1px 0 #0a2d82, inset 0 2px 4px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 0 #450E82, inset 0 2px 4px rgba(9, 3, 18, 0.5);
 }
 
-/* Emerald / Verde Cobrado & Aprobado */
+/* Éxito / Venta completada / Efectivo (#10B981) */
 .btn-3d-emerald {
-  background: linear-gradient(180deg, #34b86b 0%, #2e9b5b 55%, #1f7443 100%);
-  color: #ffffff;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 1px solid #124a2a;
-  box-shadow: 0 3px 0 #155530, 0 6px 14px rgba(46, 155, 91, 0.35);
+  background: linear-gradient(180deg, #10B981 0%, #059669 55%, #047857 100%);
+  color: #F4EFFF;
+  border-top: 1px solid rgba(244, 239, 255, 0.38);
+  border-left: 1px solid rgba(16, 185, 129, 0.4);
+  border-right: 1px solid rgba(16, 185, 129, 0.4);
+  border-bottom: 1px solid #064E3B;
+  box-shadow: 0 3px 0 #065F46;
 }
 .btn-3d-emerald:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 .btn-3d-emerald:active:not(:disabled) {
-  box-shadow: 0 1px 0 #155530, inset 0 2px 4px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 0 #065F46, inset 0 2px 4px rgba(9, 3, 18, 0.5);
 }
 
-/* Crimson / Rojo Bloqueado & Cancelar */
+/* Error / Cancelar venta / Eliminar (#F43F5E) */
 .btn-3d-crimson {
-  background: linear-gradient(180deg, #e55353 0%, #d64545 55%, #a82c2c 100%);
-  color: #ffffff;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 1px solid #6b1414;
-  box-shadow: 0 3px 0 #781919, 0 6px 14px rgba(214, 69, 69, 0.35);
+  background: linear-gradient(180deg, #F43F5E 0%, #E11D48 55%, #BE123C 100%);
+  color: #F4EFFF;
+  border-top: 1px solid rgba(244, 239, 255, 0.35);
+  border-left: 1px solid rgba(244, 63, 94, 0.4);
+  border-right: 1px solid rgba(244, 63, 94, 0.4);
+  border-bottom: 1px solid #881337;
+  box-shadow: 0 3px 0 #9F1239;
 }
 .btn-3d-crimson:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 .btn-3d-crimson:active:not(:disabled) {
-  box-shadow: 0 1px 0 #781919, inset 0 2px 4px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 0 #9F1239, inset 0 2px 4px rgba(9, 3, 18, 0.5);
 }
 
-/* Light Blue / Azul Claro Por Verificar */
+/* Acción Secundaria Destacada / Por Verificar */
 .btn-3d-info {
-  background: linear-gradient(180deg, #eef5ff 0%, #dbeaff 60%, #bdd7ff 100%);
-  color: #0f3d7a;
-  border-top: 1px solid #ffffff;
-  border-left: 1px solid #c7ddff;
-  border-right: 1px solid #c7ddff;
-  border-bottom: 1px solid #7fb0f7;
-  box-shadow: 0 3px 0 #8ab8f8, 0 4px 10px rgba(30, 95, 191, 0.18);
+  background: linear-gradient(180deg, #341961 0%, #27124B 60%, #1F0E3B 100%);
+  color: #F4EFFF;
+  border-top: 1px solid #6E3FC4;
+  border-left: 1px solid #341961;
+  border-right: 1px solid #341961;
+  border-bottom: 1px solid #2A134D;
+  box-shadow: 0 3px 0 #130824;
+}
+html:not(.dark) .btn-3d-info {
+  background: linear-gradient(180deg, #F6F1FE 0%, #EAE0FA 60%, #DDD0F6 100%);
+  color: #4C2889;
+  border-top: 1px solid #FFFFFF;
+  border-left: 1px solid #D3C3EE;
+  border-right: 1px solid #D3C3EE;
+  border-bottom: 1px solid #B69CE2;
+  box-shadow: 0 3px 0 #C6B1EA;
 }
 .btn-3d-info:hover:not(:disabled) {
-  filter: brightness(0.98);
+  filter: brightness(1.08);
 }
 .btn-3d-info:active:not(:disabled) {
-  box-shadow: 0 1px 0 #8ab8f8, inset 0 2px 4px rgba(15, 61, 122, 0.25);
+  box-shadow: 0 1px 0 #130824, inset 0 2px 4px rgba(9, 3, 18, 0.45);
 }
 
-/* Neutral Slate / Gris 3D */
+/* Neutral POS Velvet (#1F0E3B) */
 .btn-3d-neutral {
-  background: linear-gradient(180deg, #323949 0%, #242a37 60%, #1a1f29 100%);
-  color: #e1e2ec;
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid #0d1017;
-  box-shadow: 0 3px 0 #0f131c, 0 4px 10px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, #27134A 0%, #1F0E3B 60%, #16092B 100%);
+  color: #F4EFFF;
+  border-top: 1px solid #4C2889;
+  border-left: 1px solid #2A134D;
+  border-right: 1px solid #2A134D;
+  border-bottom: 1px solid #130824;
+  box-shadow: 0 3px 0 #130824;
 }
 html:not(.dark) .btn-3d-neutral {
-  background: linear-gradient(180deg, #ffffff 0%, #f1f4f9 60%, #e1e6ef 100%);
-  color: #1f2933;
-  border-top: 1px solid #ffffff;
-  border-left: 1px solid #d1d8e3;
-  border-right: 1px solid #d1d8e3;
-  border-bottom: 1px solid #adb7c7;
-  box-shadow: 0 3px 0 #bcc5d3, 0 4px 10px rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5F2FB 60%, #EAE4F5 100%);
+  color: #1F0E3B;
+  border-top: 1px solid #FFFFFF;
+  border-left: 1px solid #D9D0EA;
+  border-right: 1px solid #D9D0EA;
+  border-bottom: 1px solid #BEB0DA;
+  box-shadow: 0 3px 0 #CFC4E6;
 }
 .btn-3d-neutral:hover:not(:disabled) {
-  filter: brightness(1.06);
+  filter: brightness(1.1);
 }
 .btn-3d-neutral:active:not(:disabled) {
-  box-shadow: 0 1px 0 #0f131c, inset 0 2px 4px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 0 #130824, inset 0 2px 4px rgba(9, 3, 18, 0.45);
 }
 
-/* Glassmorphic Executive Surfaces */
+/* Tarjetas de Producto / Módulos POS con Alta Profundidad sin blur pesado:
+   - Fondo sólido semitransparente rgba(31, 14, 59, 0.92)
+   - Borde superior de luz 1px #4C2889 y resto en #2A134D (cero sombras negras) */
 .glass-panel {
-  background: linear-gradient(180deg, rgba(24, 34, 52, 0.85) 0%, rgba(18, 24, 36, 0.92) 100%);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-top-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 28px rgba(4, 9, 20, 0.55);
+  background: rgba(31, 14, 59, 0.92);
+  backdrop-filter: none;
+  border-top: 1px solid #4C2889;
+  border-right: 1px solid #2A134D;
+  border-bottom: 1px solid #2A134D;
+  border-left: 1px solid #2A134D;
+  box-shadow: inset 0 1px 0 rgba(244, 239, 255, 0.05);
 }
 html:not(.dark) .glass-panel {
-  background: #ffffff;
+  background: #FFFFFF;
   backdrop-filter: none;
-  border: 1px solid #dce2ec;
-  border-top-color: #ffffff;
-  box-shadow: 0 2px 6px rgba(15, 61, 122, 0.06), 0 10px 24px rgba(15, 61, 122, 0.05);
+  border-top: 1px solid #FFFFFF;
+  border-right: 1px solid #DFD7EE;
+  border-bottom: 1px solid #D1C5E6;
+  border-left: 1px solid #DFD7EE;
+  box-shadow: 0 2px 6px rgba(52, 25, 97, 0.06);
 }
 
-/* Recessed Input Bed */
+/* Paneles secundarios / filas internas (#130824) */
+.pos-subpanel {
+  background: #130824;
+  border: 1px solid #341961;
+}
+html:not(.dark) .pos-subpanel {
+  background: #F6F3FC;
+  border: 1px solid #DFD7EE;
+}
+
+/* Campos de entrada empotrados */
 .input-recessed {
-  background: #0d121c;
-  color: #e1e2ec;
-  border: 1px solid #222d42;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.75);
+  background: #130824;
+  color: #F4EFFF;
+  border: 1px solid #341961;
+  box-shadow: inset 0 1px 2px rgba(9, 3, 18, 0.55);
+}
+.input-recessed::placeholder {
+  color: #9E8FB2;
+  opacity: 0.72;
 }
 .input-recessed:focus {
   outline: none;
-  border-color: #1d63ff;
-  box-shadow: 0 0 0 1px #1d63ff, 0 0 10px rgba(29, 99, 255, 0.35), inset 0 1px 3px rgba(0, 0, 0, 0.75);
+  border-color: #8A2BE2;
+  box-shadow: 0 0 0 1px #8A2BE2, 0 0 0 3px rgba(138, 43, 226, 0.22);
 }
 html:not(.dark) .input-recessed {
-  background: #f6f8fb;
-  color: #1f2933;
-  border: 1px solid #cbd5e1;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+  background: #F8F6FC;
+  color: #130824;
+  border: 1px solid #D4C8EB;
+  box-shadow: inset 0 1px 2px rgba(19, 8, 36, 0.06);
+}
+html:not(.dark) .input-recessed::placeholder {
+  color: #7A6B8F;
 }
 html:not(.dark) .input-recessed:focus {
-  border-color: #1e5fbf;
-  box-shadow: 0 0 0 2px rgba(30, 95, 191, 0.22);
+  border-color: #8A2BE2;
+  box-shadow: 0 0 0 2px rgba(138, 43, 226, 0.2);
 }
 
 /* Reduced motion support */
@@ -190,7 +237,7 @@ html:not(.dark) .input-recessed:focus {
   transition-duration: 0.01ms !important;
 }
 
-/* Exact 48mm Thermal Ticket Print Rules */
+/* Exact 48mm Thermal Ticket Print Rules (NO MODIFICAR) */
 @media print {
   @page {
     size: 48mm auto;

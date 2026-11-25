@@ -39,9 +39,9 @@ export function SplashScreen({ onComplete, reduceAnimations = false }: SplashScr
   }, [onComplete, reduceAnimations]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0d14] text-[#e1e2ec] p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center pos-canvas text-[#F4EFFF] p-6">
       <div className="glass-panel w-full max-w-md rounded-lg p-8 text-center">
-        <div className="mx-auto w-72 aspect-[3/2] rounded-xl overflow-hidden bg-[#0b0e15] border border-white/15 flex items-center justify-center shadow-lg">
+        <div className="mx-auto w-72 aspect-[3/2] rounded-xl overflow-hidden bg-[#130824] border border-[#4C2889] flex items-center justify-center">
           <img
             src="/assets/aistudio/Gemini_Generated_Image_13e89c53.jpeg"
             alt="Directo de Granja"
@@ -50,26 +50,26 @@ export function SplashScreen({ onComplete, reduceAnimations = false }: SplashScr
           />
         </div>
 
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-white">
+        <h1 className="mt-5 text-2xl font-bold tracking-tight text-[#F4EFFF]">
           DIRECTO DE GRANJA
         </h1>
-        <p className="mt-1 text-sm text-[#71ffe5] font-medium">
+        <p className="mt-1 text-sm text-[#C084FC] font-medium">
           «Te faltan huevos a nosotros nos sobran»
         </p>
-        <p className="mt-1 text-xs text-[#8d90a2]">
+        <p className="mt-1 text-xs text-[#9E8FB2]">
           Consola del Dueño para Windows
         </p>
 
         <div className="mt-6">
-          <div className="h-2.5 w-full rounded bg-[#0b0e15] border border-[#222d42] overflow-hidden">
+          <div className="h-2.5 w-full rounded bg-[#130824] border border-[#341961] overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-[#1d63ff] to-[#00e5c9] transition-all duration-300"
+              className="h-full bg-gradient-to-r from-[#8A2BE2] to-[#10B981] transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className="mt-2.5 flex items-center justify-between text-xs text-[#c3c5d8]">
+          <div className="mt-2.5 flex items-center justify-between text-xs text-[#9E8FB2]">
             <span>{STEPS[stepIdx]}</span>
-            <span className="font-mono tabular-nums">{progress}%</span>
+            <span className="font-mono tabular-nums text-[#F4EFFF]">{progress}%</span>
           </div>
         </div>
 

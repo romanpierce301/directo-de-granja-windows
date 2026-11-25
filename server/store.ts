@@ -53,6 +53,7 @@ export interface LedgerDatabase {
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
+const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
 const DATA_FILE = path.join(DATA_DIR, 'huevocontrol-ledger.json');
 
 function createSeedDatabase(): LedgerDatabase {
@@ -155,9 +156,10 @@ function createSeedDatabase(): LedgerDatabase {
       slogan: 'Te faltan huevos a nosotros nos sobran',
       businessPhone: '000 000 0000',
       businessAddress: 'Dirección del negocio',
+      profilePictureUrl: '',
       reduceAnimations: false,
       themeMode: 'dark',
-      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1, BD: 1 },
+      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 },
     },
     acknowledgedAlertIds: [],
   };
@@ -170,13 +172,17 @@ class LedgerStore {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
     if (fs.existsSync(DATA_FILE)) {
       try {
         const raw = fs.readFileSync(DATA_FILE, 'utf8');
         this.db = JSON.parse(raw) as LedgerDatabase;
         this.db.warehouseShipments ??= [];
-        this.db.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1 };
+        this.db.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 };
         this.db.settings.nextFolioBySeries.BD ??= 1;
+        this.db.settings.nextFolioBySeries.E ??= 1;
       } catch {
         this.db = createSeedDatabase();
         this.persist();

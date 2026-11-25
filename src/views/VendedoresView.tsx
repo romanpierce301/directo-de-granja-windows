@@ -86,10 +86,10 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+          <h2 className="text-xl font-bold text-[#130824] dark:text-[#F4EFFF]">
             Vendedores, folios y dispositivos
           </h2>
-          <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+          <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2] mt-0.5">
             Solo las cuentas aprobadas reciben clientes y precio del día · Un dispositivo activo por cuenta
           </p>
         </div>
@@ -110,7 +110,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
           className="glass-panel rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
         >
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#4C3F63] dark:text-[#9E8FB2] mb-1">
               Nombre completo
             </label>
             <input
@@ -122,7 +122,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#4C3F63] dark:text-[#9E8FB2] mb-1">
               Correo de Google / acceso
             </label>
             <input
@@ -135,7 +135,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#4C3F63] dark:text-[#9E8FB2] mb-1">
               Contraseña (mín. 8 car.)
             </label>
             <input
@@ -149,7 +149,7 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 dark:text-[#c3c5d8] mb-1">
+            <label className="block text-xs text-[#4C3F63] dark:text-[#9E8FB2] mb-1">
               Rol RBAC
             </label>
             <select
@@ -184,19 +184,19 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-base font-bold text-[#130824] dark:text-[#F4EFFF]">
                       {v.name}
                     </h3>
-                    <span className="font-mono text-xs text-[#1E5FBF] dark:text-[#71ffe5] font-semibold">
+                    <span className="font-mono text-xs text-[#7C3AED] dark:text-[#C084FC] font-semibold">
                       {v.folioSeries ? `Serie ${v.folioSeries}` : 'Sin serie'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2] mt-0.5">
+                  <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2] mt-0.5">
                     {v.googleEmail}
                   </p>
                 </div>
 
-                {/* Color-changing 3D buttons (exact spec: Aprobar gris->verde Aprobado, Bloquear gris->rojo Bloqueado) */}
+                {/* Color-changing 3D buttons */}
                 <div className="flex items-center gap-2">
                   <TactileButton
                     variant={isApproved ? 'emerald' : 'neutral'}
@@ -227,33 +227,33 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
               </div>
 
               {/* Devices list */}
-              <div className="border-t border-slate-200 dark:border-white/10 pt-3 space-y-2">
-                <div className="text-xs font-semibold text-slate-700 dark:text-[#c3c5d8]">
+              <div className="border-t border-[#DFD7EE] dark:border-[#341961] pt-3 space-y-2">
+                <div className="text-xs font-semibold text-[#4C3F63] dark:text-[#9E8FB2]">
                   Equipos Android vinculados
                 </div>
                 {vendorDevices.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-[#8d90a2]">
+                  <p className="text-xs text-[#6B5B82] dark:text-[#9E8FB2]">
                     Sin teléfono registrado aún.
                   </p>
                 ) : (
                   vendorDevices.map((dev) => (
                     <div
                       key={dev.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2 text-xs"
+                      className="pos-subpanel flex flex-wrap items-center justify-between gap-2 rounded px-3 py-2 text-xs"
                     >
                       <div className="flex items-center gap-2">
                         <Smartphone
                           className={`w-4 h-4 ${
                             dev.active
-                              ? 'text-[#2E9B5B] dark:text-[#00f076]'
-                              : 'text-slate-400'
+                              ? 'text-[#059669] dark:text-[#10B981]'
+                              : 'text-[#9E8FB2]'
                           }`}
                         />
                         <div>
-                          <div className="font-medium text-slate-900 dark:text-white">
+                          <div className="font-medium text-[#130824] dark:text-[#F4EFFF]">
                             {dev.deviceName}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-500 dark:text-[#8d90a2]">
+                          <div className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
                             {dev.lastSyncUtc
                               ? `Última sync: ${formatMexicoCityDate(dev.lastSyncUtc)} ${formatMexicoCityTime(dev.lastSyncUtc)}`
                               : 'Sin sincronizar'}
@@ -280,21 +280,21 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
 
       {/* Owners Table */}
       <div className="glass-panel rounded-lg p-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
+        <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF] mb-2">
           Cuentas de administrador (Dueño en Windows)
         </h3>
         <div className="space-y-1.5 text-xs">
           {owners.map((o) => (
             <div
               key={o.id}
-              className="flex items-center justify-between py-1.5 border-b border-slate-200/70 dark:border-white/5 last:border-0"
+              className="flex items-center justify-between py-1.5 border-b border-[#EAE4F5] dark:border-[#341961]/70 last:border-0"
             >
               <div>
-                <span className="font-semibold text-slate-900 dark:text-white">{o.name}</span>
-                <span className="mx-2 text-slate-400">·</span>
-                <span className="text-slate-500 dark:text-[#8d90a2]">{o.googleEmail}</span>
+                <span className="font-semibold text-[#130824] dark:text-[#F4EFFF]">{o.name}</span>
+                <span className="mx-2 text-[#9E8FB2]">·</span>
+                <span className="text-[#6B5B82] dark:text-[#9E8FB2]">{o.googleEmail}</span>
               </div>
-              <span className="font-mono text-[#2E9B5B] dark:text-[#00f076] font-medium">
+              <span className="font-mono text-[#059669] dark:text-[#10B981] font-medium">
                 Rol Dueño · Activa
               </span>
             </div>
@@ -302,19 +302,19 @@ export function VendedoresView({ state, onRefresh, onNotify }: VendedoresViewPro
         </div>
       </div>
 
-      {/* Real Crew Members (Encargado, Choferes y Chalanes) */}
+      {/* Real Crew Members */}
       <div className="glass-panel rounded-lg p-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
+        <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF] mb-2">
           Personal de ruta registrado (Encargado, Choferes y Chalanes)
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
           {state.crewMembers.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between rounded bg-slate-100/70 dark:bg-[#0d121c] px-3 py-2"
+              className="pos-subpanel flex items-center justify-between rounded px-3 py-2"
             >
-              <span className="font-semibold text-slate-900 dark:text-white">{member.name}</span>
-              <span className="font-mono uppercase text-[11px] text-[#1E5FBF] dark:text-[#71ffe5] font-semibold">
+              <span className="font-semibold text-[#130824] dark:text-[#F4EFFF]">{member.name}</span>
+              <span className="font-mono uppercase text-[11px] text-[#7C3AED] dark:text-[#C084FC] font-semibold">
                 {member.roleTitle}
               </span>
             </div>

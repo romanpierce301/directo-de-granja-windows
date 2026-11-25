@@ -22,6 +22,7 @@ import { apiClient, type DashboardState } from './services/apiClient.ts';
 import { SplashScreen } from './components/SplashScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { GuidedTour, type NavTab } from './components/GuidedTour.tsx';
+import { EggOverlayProvider } from './components/EggOverlayProvider.tsx';
 import { PanelGeneralView } from './views/PanelGeneralView.tsx';
 import { BodegaView } from './views/BodegaView.tsx';
 import { VendedoresView } from './views/VendedoresView.tsx';
@@ -156,93 +157,101 @@ export default function App() {
   const unackedAlertsCount = state.alerts.filter((a) => !a.acknowledged).length;
 
   return (
-    <div className="min-h-screen flex bg-[#F2F4F7] dark:bg-[#0a0d14] text-[#1F2933] dark:text-[#e1e2ec]">
-      {/* Navy / Obsidian Desktop Sidebar Rail */}
-      <aside
-        className={`${
-          sidebarOpen ? 'w-60' : 'w-16'
-        } shrink-0 bg-[#0F3D7A] dark:bg-[#0b0e15] border-r border-[#0a2a54] dark:border-white/10 text-white flex flex-col transition-all duration-150 print:hidden`}
-      >
-        <div className="min-h-14 py-2 px-3 flex items-center justify-between border-b border-white/10">
-          {sidebarOpen && (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <img
-                src="/assets/aistudio/Gemini_Generated_Image_13e89c53.jpeg"
-                alt="Directo de Granja"
-                className="w-12 h-8 rounded overflow-hidden border border-white/20 object-cover object-center shrink-0"
-                referrerPolicy="no-referrer"
-              />
-              <div className="min-w-0">
-                <div className="text-xs font-bold tracking-tight truncate">
-                  DIRECTO DE GRANJA
-                </div>
-                <div className="text-[10px] text-[#71ffe5] leading-tight">
-                  Te faltan huevos a nosotros nos sobran
+    <EggOverlayProvider>
+      <div className="min-h-screen flex pos-canvas text-[#130824] dark:text-[#F4EFFF]">
+        {/* Deep Velvet POS Sidebar Rail (#130824) */}
+        <aside
+          className={`${
+            sidebarOpen ? 'w-60' : 'w-16'
+          } shrink-0 bg-[#1F0E3B] dark:bg-[#130824] border-r border-[#341961] text-[#F4EFFF] flex flex-col transition-all duration-150 print:hidden`}
+        >
+          <div className="min-h-14 py-2 px-3 flex items-center justify-between border-b border-[#341961]">
+            {sidebarOpen && (
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src="/assets/aistudio/Gemini_Generated_Image_13e89c53.jpeg"
+                  alt="Directo de Granja"
+                  className="w-12 h-8 rounded overflow-hidden border border-[#4C2889] object-cover object-center shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="min-w-0">
+                  <div className="text-xs font-bold tracking-tight text-[#F4EFFF] truncate">
+                    DIRECTO DE GRANJA
+                  </div>
+                  <div className="text-[10px] text-[#C084FC] leading-tight">
+                    Te faltan huevos a nosotros nos sobran
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarOpen((v) => !v)}
-            className="p-1.5 rounded hover:bg-white/10 text-white/80"
-            aria-label="Alternar menú lateral"
-          >
-            <Menu className="w-4 h-4" />
-          </button>
-        </div>
-
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
-                  active
-                    ? 'bg-[#1d63ff] text-white shadow-md'
-                    : 'text-white/75 hover:text-white hover:bg-white/10'
-                }`}
-                title={item.label}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {sidebarOpen && <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-white/10">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <LogOut className="w-4 h-4 shrink-0" />
-            {sidebarOpen && <span>Cerrar sesión</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Windows Command Header */}
-        <header className="h-14 px-5 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#10131a] flex items-center justify-between gap-4 print:hidden">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-sm font-bold text-slate-900 dark:text-white truncate">
-              {NAV_ITEMS.find((i) => i.id === activeTab)?.label}
-            </span>
-            <span className="text-slate-300 dark:text-white/20">·</span>
-            <span className="text-xs text-slate-500 dark:text-[#8d90a2] truncate">
-              {user.name} (Dueño)
-            </span>
+            )}
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="p-1.5 rounded hover:bg-[#1F0E3B] text-[#9E8FB2] hover:text-[#F4EFFF]"
+              aria-label="Alternar menú lateral"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
           </div>
+
+          <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
+                    active
+                      ? 'bg-[#8A2BE2] text-[#F4EFFF] border-t border-[#B975F7] shadow-sm'
+                      : 'text-[#9E8FB2] hover:text-[#F4EFFF] hover:bg-[#1F0E3B]'
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {sidebarOpen && <span className="truncate">{item.label}</span>}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="p-3 border-t border-[#341961]">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-[#9E8FB2] hover:text-[#F4EFFF] hover:bg-[#1F0E3B]"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              {sidebarOpen && <span>Cerrar sesión</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content Workspace */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top Windows Command Header (#130824) */}
+          <header className="h-14 px-5 border-b border-[#DFD7EE] dark:border-[#341961] bg-white dark:bg-[#130824] flex items-center justify-between gap-4 print:hidden">
+            <div className="flex items-center gap-3 min-w-0">
+              {state.settings.profilePictureUrl && (
+                <img
+                  src={state.settings.profilePictureUrl}
+                  alt="Perfil"
+                  className="w-8 h-8 rounded-full object-cover border border-[#4C2889] shrink-0"
+                />
+              )}
+              <span className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF] truncate">
+                {NAV_ITEMS.find((i) => i.id === activeTab)?.label}
+              </span>
+              <span className="text-[#9E8FB2]/50">·</span>
+              <span className="text-xs text-[#6B5B82] dark:text-[#9E8FB2] truncate">
+                {user.name} (Dueño)
+              </span>
+            </div>
 
           <div className="flex items-center gap-4 shrink-0 text-xs">
             {unackedAlertsCount > 0 && (
               <button
                 onClick={() => setActiveTab('panel')}
-                className="inline-flex items-center gap-1.5 font-semibold text-[#D64545] dark:text-[#ffb4ab] hover:underline"
+                className="inline-flex items-center gap-1.5 font-semibold text-[#E11D48] dark:text-[#F43F5E] hover:underline"
               >
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>{unackedAlertsCount} alertas</span>
@@ -252,13 +261,13 @@ export default function App() {
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]">
               {wsConnected ? (
                 <>
-                  <Wifi className="w-3.5 h-3.5 text-[#2E9B5B] dark:text-[#00f076]" />
-                  <span className="text-[#2E9B5B] dark:text-[#00f076]">Sync en vivo</span>
+                  <Wifi className="w-3.5 h-3.5 text-[#059669] dark:text-[#10B981]" />
+                  <span className="text-[#059669] dark:text-[#10B981]">Sync en vivo</span>
                 </>
               ) : (
                 <>
-                  <WifiOff className="w-3.5 h-3.5 text-[#D64545] dark:text-[#ff334b]" />
-                  <span className="text-[#D64545] dark:text-[#ff334b]">Sin enlace</span>
+                  <WifiOff className="w-3.5 h-3.5 text-[#E11D48] dark:text-[#F43F5E]" />
+                  <span className="text-[#E11D48] dark:text-[#F43F5E]">Sin enlace</span>
                 </>
               )}
             </div>
@@ -321,9 +330,9 @@ export default function App() {
 
       {/* Non-intrusive Toast Feedback */}
       {toast && (
-        <div className="fixed bottom-5 left-5 z-50 glass-panel rounded-md px-4 py-2.5 text-xs font-medium flex items-center gap-3 border border-[#1d63ff]/50 shadow-xl print:hidden">
+        <div className="fixed bottom-5 left-5 z-50 glass-panel rounded-md px-4 py-2.5 text-xs font-medium text-[#130824] dark:text-[#F4EFFF] flex items-center gap-3 border border-[#8A2BE2]/60 print:hidden">
           <span>{toast}</span>
-          <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">
+          <button onClick={() => setToast(null)} className="text-[#9E8FB2] hover:text-[#F4EFFF]">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -334,5 +343,6 @@ export default function App() {
         <GuidedTour onSelectTab={setActiveTab} onClose={() => setShowTour(false)} />
       )}
     </div>
+    </EggOverlayProvider>
   );
 }
