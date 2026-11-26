@@ -26,6 +26,30 @@ export class ApiClient {
     this.disconnectWs();
   }
 
+  public async getAuthStatus(): Promise<{ bootstrapped: boolean; hasActiveOwner: boolean; userCount: number }> {
+    const res = await fetch('/api/auth/status');
+    return res.json();
+  }
+
+  public async bootstrapOwner(payload: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<Omit<UserAccount, 'passwordHash'>> {
+    const res = await fetch('/api/auth/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al registrar el dueño inicial.');
+    }
+    this.token = data.token;
+    sessionStorage.setItem('hc_jwt', data.token);
+    return data.user;
+  }
+
   public async login(email: string, password: string): Promise<Omit<UserAccount, 'passwordHash'>> {
     const res = await fetch('/api/auth/login', {
       method: 'POST',

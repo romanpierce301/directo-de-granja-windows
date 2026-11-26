@@ -135,6 +135,17 @@ export default function App() {
     }
   };
 
+  const handleBootstrap = async (payload: { name: string; email: string; password: string }) => {
+    const loggedUser = await apiClient.bootstrapOwner(payload);
+    setUser(loggedUser);
+    await refreshState();
+    const seenTour = localStorage.getItem('hc_tour_seen');
+    if (!seenTour) {
+      setShowTour(true);
+      localStorage.setItem('hc_tour_seen', '1');
+    }
+  };
+
   const handleLogout = () => {
     apiClient.clearSession();
     setUser(null);
@@ -151,7 +162,7 @@ export default function App() {
   }
 
   if (!user || !state) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} onBootstrap={handleBootstrap} />;
   }
 
   const unackedAlertsCount = state.alerts.filter((a) => !a.acknowledged).length;

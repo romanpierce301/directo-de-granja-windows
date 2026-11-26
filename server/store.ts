@@ -31,7 +31,7 @@ import {
   type WarehouseShipmentLine,
   type Workday,
 } from '../shared/domain.ts';
-import { hashPassword } from './security.ts';
+import { hashPassword, verifyPassword, encryptField, decryptField } from './security.ts';
 
 export interface LedgerDatabase {
   users: UserAccount[];
@@ -71,87 +71,10 @@ function resolveDefaultDbPath(): string {
 }
 
 function createSeedDatabase(): LedgerDatabase {
-  const nowIso = new Date().toISOString();
-
-  const ownerId = 'usr-owner-01';
-  const vendorTonyId = 'usr-vend-tony';
-  const vendorHunterId = 'usr-vend-hunter';
-  const vendorVictorId = 'usr-vend-victor';
-  const vendorIvanId = 'usr-vend-ivan';
-
-  const ownerHash = hashPassword('Granja2026!');
-  const vendorHash = hashPassword('Vendedor2026!');
-
-  const users: UserAccount[] = [
-    {
-      id: ownerId,
-      googleEmail: 'dueno@directodegranja.mx',
-      name: 'Don Juan',
-      role: 'dueno',
-      status: 'activa',
-      folioSeries: null,
-      createdAtUtc: nowIso,
-      passwordHash: ownerHash,
-    },
-    {
-      id: vendorTonyId,
-      googleEmail: 'tony@directodegranja.mx',
-      name: 'Tony (Encargado)',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'A',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorHunterId,
-      googleEmail: 'hunter@directodegranja.mx',
-      name: 'Hunter',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'B',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorVictorId,
-      googleEmail: 'victor@directodegranja.mx',
-      name: 'Victor',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'C',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-    {
-      id: vendorIvanId,
-      googleEmail: 'ivan@directodegranja.mx',
-      name: 'Ivan',
-      role: 'vendedor',
-      status: 'activa',
-      folioSeries: 'D',
-      createdAtUtc: nowIso,
-      passwordHash: vendorHash,
-    },
-  ];
-
-  const crewMembers: CrewMember[] = [
-    { id: 'crew-tony', userId: vendorTonyId, name: 'Tony', roleTitle: 'encargado', active: true },
-    { id: 'crew-hunter', userId: vendorHunterId, name: 'Hunter', roleTitle: 'chofer', active: true },
-    { id: 'crew-victor', userId: vendorVictorId, name: 'Victor', roleTitle: 'chofer', active: true },
-    { id: 'crew-ivan', userId: vendorIvanId, name: 'Ivan', roleTitle: 'chofer', active: true },
-    { id: 'crew-cristian', userId: vendorTonyId, name: 'Cristian', roleTitle: 'chalan', active: true },
-    { id: 'crew-mateo', userId: vendorTonyId, name: 'Mateo', roleTitle: 'chalan', active: true },
-    { id: 'crew-orlando', userId: vendorTonyId, name: 'Orlando', roleTitle: 'chalan', active: true },
-    { id: 'crew-papas', userId: vendorHunterId, name: 'Papas', roleTitle: 'chalan', active: true },
-    { id: 'crew-sapito', userId: vendorHunterId, name: 'Sapito', roleTitle: 'chalan', active: true },
-    { id: 'crew-brody', userId: vendorHunterId, name: 'Brody', roleTitle: 'chalan', active: true },
-  ];
-
   return {
-    users,
+    users: [],
     devices: [],
-    crewMembers,
+    crewMembers: [],
     workdays: [],
     customers: [],
     dailyPrices: [],
@@ -215,11 +138,11 @@ export class LedgerStore {
 
     this.initSchema();
 
-    const userCountRow = this.sqlite
-      .prepare('SELECT COUNT(*) AS cnt FROM users')
+    const settingsCountRow = this.sqlite
+      .prepare('SELECT COUNT(*) AS cnt FROM app_settings WHERE id = 1')
       .get() as { cnt: number };
 
-    if (userCountRow.cnt === 0) {
+    if (settingsCountRow.cnt === 0) {
       if (dbPath === DEFAULT_SQLITE_FILE && fs.existsSync(LEGACY_JSON_FILE)) {
         try {
           const raw = fs.readFileSync(LEGACY_JSON_FILE, 'utf8');
@@ -528,16 +451,23 @@ export class LedgerStore {
 
   private loadFromSqlite(): LedgerDatabase {
     const users = (this.sqlite.prepare('SELECT * FROM users ORDER BY sort_order ASC').all() as any[]).map(
-      (r) => ({
-        id: r.id,
-        googleEmail: r.google_email,
-        name: r.name,
-        role: r.role,
-        status: r.status,
-        folioSeries: r.folio_series ?? null,
-        createdAtUtc: r.created_at_utc,
-        passwordHash: r.password_hash ?? undefined,
-      })
+      (r) => {
+        let status = r.status;
+        const pHash = r.password_hash;
+        if (pHash && (verifyPassword('Granja2026!', pHash) || verifyPassword('Vendedor2026!', pHash))) {
+          status = 'bloqueada';
+        }
+        return {
+          id: r.id,
+          googleEmail: r.google_email,
+          name: r.name,
+          role: r.role,
+          status,
+          folioSeries: r.folio_series ?? null,
+          createdAtUtc: r.created_at_utc,
+          passwordHash: pHash ?? undefined,
+        };
+      }
     ) as UserAccount[];
 
     const devices = (this.sqlite.prepare('SELECT * FROM devices ORDER BY sort_order ASC').all() as any[]).map(
@@ -575,10 +505,10 @@ export class LedgerStore {
       (r) => ({
         id: r.id,
         businessName: r.business_name,
-        contactName: r.contact_name,
-        phone: r.phone,
-        address: r.address,
-        notes: r.notes,
+        contactName: decryptField(r.contact_name),
+        phone: decryptField(r.phone),
+        address: decryptField(r.address),
+        notes: decryptField(r.notes),
         active: Boolean(r.active),
         createdByUserId: r.created_by_user_id,
         mergedIntoCustomerId: r.merged_into_customer_id ?? null,
@@ -911,10 +841,10 @@ export class LedgerStore {
           c.id,
           i,
           c.businessName,
-          c.contactName,
-          c.phone,
-          c.address,
-          c.notes,
+          encryptField(c.contactName),
+          encryptField(c.phone),
+          encryptField(c.address),
+          encryptField(c.notes),
           c.active ? 1 : 0,
           c.createdByUserId,
           c.mergedIntoCustomerId ?? null,

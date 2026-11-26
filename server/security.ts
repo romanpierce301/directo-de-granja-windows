@@ -3,10 +3,21 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 import type { UserRole } from '../shared/domain.ts';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
-// Ephemeral CSPRNG fallback for local dev/preview when env var is not injected
-const DEV_EPHEMERAL_JWT = crypto.randomBytes(32).toString('hex');
-const DEV_EPHEMERAL_AES = crypto.randomBytes(32);
+// Load .env if present
+const envPath = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config();
+}
+
+// Deterministic fallback for local dev/preview when env var is not injected
+const DEV_EPHEMERAL_JWT = 'fixed_dev_fallback_jwt_secret_key_32_chars_minimum';
+const DEV_EPHEMERAL_AES = crypto.createHash('sha256').update('fixed_dev_fallback_aes_key_for_directo_de_granja').digest();
 
 function getJwtSecret(): string {
   const envSecret = process.env.JWT_SECRET;
@@ -25,6 +36,70 @@ function getAesKey(): Buffer {
     return crypto.createHash('sha256').update(envKey).digest();
   }
   return DEV_EPHEMERAL_AES;
+}
+
+export function validateSecurityKeys(): void {
+  const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+  let jwtSecret = process.env.JWT_SECRET?.trim();
+  let aesKey = process.env.AES_ENCRYPTION_KEY?.trim();
+
+  // If missing in dev and .env does not exist, initialize local .env (git-ignored)
+  if ((!jwtSecret || !aesKey) && !isTest && process.env.NODE_ENV !== 'production') {
+    const envFile = path.resolve(process.cwd(), '.env');
+    if (!fs.existsSync(envFile)) {
+      const generatedJwt = crypto.randomBytes(32).toString('hex');
+      const generatedAes = crypto.randomBytes(32).toString('hex');
+      fs.writeFileSync(
+        envFile,
+        `# Claves de seguridad locales (Excluidas de Git mediante .gitignore)\nJWT_SECRET="${generatedJwt}"\nAES_ENCRYPTION_KEY="${generatedAes}"\nSQLITE_DB_PATH="data/directodegranja.db"\n`,
+        'utf8'
+      );
+      process.env.JWT_SECRET = generatedJwt;
+      process.env.AES_ENCRYPTION_KEY = generatedAes;
+      jwtSecret = generatedJwt;
+      aesKey = generatedAes;
+    }
+  }
+
+  if (!jwtSecret || jwtSecret.length < 32) {
+    if (isTest) {
+      process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_key_32_characters_minimum_required';
+    } else {
+      console.error('FATAL: JWT_SECRET no está configurada o es menor a 32 caracteres. Deteniendo arranque.');
+      process.exit(1);
+    }
+  }
+
+  if (!aesKey || (aesKey.length < 32 && !/^[0-9a-fA-F]{64}$/.test(aesKey))) {
+    if (isTest) {
+      process.env.AES_ENCRYPTION_KEY = process.env.AES_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+    } else {
+      console.error('FATAL: AES_ENCRYPTION_KEY no está configurada o no tiene formato válido (64 hex / 32+ chars). Deteniendo arranque.');
+      process.exit(1);
+    }
+  }
+}
+
+export function encryptField(val: string): string {
+  if (!val) return '';
+  if (val.startsWith('enc:')) return val;
+  try {
+    return 'enc:' + encryptSensitive(val);
+  } catch {
+    return val;
+  }
+}
+
+export function decryptField(val: string): string {
+  if (!val) return '';
+  if (val.startsWith('enc:')) {
+    try {
+      return decryptSensitive(val.slice(4));
+    } catch {
+      return val;
+    }
+  }
+  return val;
 }
 
 export interface JwtClaims {

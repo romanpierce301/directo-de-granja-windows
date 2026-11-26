@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -42,19 +44,37 @@ import {
 } from './shared/domain.ts';
 import {
   hashPassword,
-  requireAuth,
+  requireAuth as baseRequireAuth,
   requireRole,
   sanitizePlainText,
   sanitizeProfileImageDataUrl,
   signJwt,
   verifyJwt,
   verifyPassword,
+  validateSecurityKeys,
   type AuthenticatedRequest,
 } from './server/security.ts';
 import { store } from './server/store.ts';
 import { swaggerSpec } from './server/swagger.ts';
 
 const PORT = 3000;
+
+validateSecurityKeys();
+
+export function requireAuth(req: AuthenticatedRequest, res: express.Response, next: express.NextFunction): void {
+  baseRequireAuth(req, res, () => {
+    if (!req.user) {
+      res.status(401).json({ error: 'No autenticado.' });
+      return;
+    }
+    const user = store.getRawUsers().find((u) => u.id === req.user!.sub);
+    if (!user || user.status !== 'activa') {
+      res.status(403).json({ error: 'Cuenta inactiva, bloqueada o revocada.' });
+      return;
+    }
+    next();
+  });
+}
 
 async function bootstrap() {
   const app = express();
@@ -183,7 +203,71 @@ async function bootstrap() {
     });
   });
 
-  // Authentication
+  // Authentication status & bootstrap
+  app.get('/api/auth/status', (_req, res) => {
+    const db = store.getDb();
+    const hasActiveOwner = db.users.some((u) => u.role === 'dueno' && u.status === 'activa');
+    res.json({
+      bootstrapped: hasActiveOwner,
+      hasActiveOwner,
+      userCount: db.users.length,
+    });
+  });
+
+  app.post('/api/auth/bootstrap', authLimiter, (req, res) => {
+    const db = store.getDb();
+    const hasActiveOwner = db.users.some((u) => u.role === 'dueno' && u.status === 'activa');
+    if (hasActiveOwner) {
+      res.status(403).json({ error: 'El sistema ya cuenta con un dueño registrado.' });
+      return;
+    }
+    const name = sanitizePlainText(req.body?.name, 100);
+    const email = sanitizePlainText(req.body?.email, 140).toLowerCase();
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!name || !email.includes('@') || password.length < 8) {
+      res.status(400).json({
+        error: 'Nombre, correo válido y contraseña mínima de 8 caracteres son obligatorios.',
+      });
+      return;
+    }
+
+    const ownerUser = {
+      id: `usr-${crypto.randomUUID()}`,
+      googleEmail: email,
+      name,
+      role: 'dueno' as const,
+      status: 'activa' as const,
+      folioSeries: null,
+      createdAtUtc: new Date().toISOString(),
+      passwordHash: hashPassword(password),
+    };
+    db.users = db.users.filter(
+      (u) =>
+        u.googleEmail.toLowerCase() !== 'dueno@directodegranja.mx' &&
+        !u.id.startsWith('usr-vend-')
+    );
+    db.users.push(ownerUser);
+    store.addAudit(
+      'users',
+      ownerUser.id,
+      'REGISTRAR_DUENO_INICIAL',
+      `Dueño inicial registrado: ${name}`,
+      ownerUser.id,
+      name
+    );
+    store.persist();
+    const token = signJwt({
+      sub: ownerUser.id,
+      email: ownerUser.googleEmail,
+      name: ownerUser.name,
+      role: ownerUser.role,
+      folioSeries: ownerUser.folioSeries,
+    });
+    const { passwordHash: _ph, ...safe } = ownerUser;
+    res.status(201).json({ token, user: safe });
+  });
+
   app.post('/api/auth/login', authLimiter, (req, res) => {
     const email = sanitizePlainText(req.body?.email, 160).toLowerCase();
     const password = typeof req.body?.password === 'string' ? req.body.password : '';

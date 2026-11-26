@@ -385,7 +385,7 @@ describe('Almacenamiento principal en SQLite (WAL, persistencia tras reinicio y 
       });
 
       const db1 = store1.getDb();
-      expect(db1.users.length).toBeGreaterThanOrEqual(5);
+      expect(db1.users.length).toBe(0);
       expect(db1.customers.length).toBe(0);
 
       const sqliName = "Sr. Pablo'; DROP TABLE users; --";
@@ -445,7 +445,7 @@ describe('Almacenamiento principal en SQLite (WAL, persistencia tras reinicio y 
       const store2 = createLedgerStore(dbPath);
       expect(store2.pingSqlite()).toBe(true);
       const db2 = store2.getDb();
-      expect(db2.users.length).toBeGreaterThanOrEqual(5);
+      expect(db2.users.length).toBe(0);
       expect(db2.customers).toHaveLength(1);
       expect(db2.customers[0].businessName).toBe(sqliName);
       expect(db2.warehouseShipments).toHaveLength(1);
@@ -660,5 +660,97 @@ describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('Bloquea automáticamente cuentas legacy que tengan contraseñas demo conocidas', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-legacy-demo-'));
+    const dbPath = path.join(tmpDir, 'legacy.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      const db1 = store1.getDb();
+      // Simular que existían cuentas demo con contraseñas conocidas
+      db1.users.push({
+        id: 'usr-legacy-owner',
+        googleEmail: 'dueno@directodegranja.mx',
+        name: 'Dueño Demo',
+        role: 'dueno',
+        status: 'activa',
+        folioSeries: null,
+        createdAtUtc: '2026-01-01T00:00:00Z',
+        passwordHash: hashPassword('Granja2026!'),
+      });
+      db1.users.push({
+        id: 'usr-legacy-vend',
+        googleEmail: 'vendedor@directodegranja.mx',
+        name: 'Vendedor Demo',
+        role: 'vendedor',
+        status: 'activa',
+        folioSeries: 'A',
+        createdAtUtc: '2026-01-01T00:00:00Z',
+        passwordHash: hashPassword('Vendedor2026!'),
+      });
+      store1.persist();
+      store1.close();
+
+      // Al recargar desde SQLite, el store debe detectar contraseñas conocidas y bloquearlas
+      const store2 = createLedgerStore(dbPath);
+      const db2 = store2.getDb();
+      expect(db2.users).toHaveLength(2);
+      expect(db2.users[0].status).toBe('bloqueada');
+      expect(db2.users[1].status).toBe('bloqueada');
+      store2.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('Cifra con AES-256-GCM los campos personales en SQLite y los descifra al leerlos', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-enc-test-'));
+    const dbPath = path.join(tmpDir, 'encrypted.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      const db1 = store1.getDb();
+      db1.customers.push({
+        id: 'cust-sensitive-1',
+        businessName: 'Tienda La Esperanza',
+        contactName: 'María García',
+        phone: '55 1234 5678',
+        address: 'Av. Hidalgo 123, Col. Centro',
+        notes: 'Cliente preferente con crédito',
+        active: true,
+        createdByUserId: 'usr-owner-01',
+        mergedIntoCustomerId: null,
+        createdAtUtc: '2026-11-25T10:00:00Z',
+      });
+      store1.persist();
+      store1.close();
+
+      // Verificar directamente en SQLite raw que los campos están cifrados con prefijo enc:
+      const Database = (store1 as any).sqlite.constructor;
+      const rawDb = new Database(dbPath);
+      const row = rawDb.prepare('SELECT contact_name, phone, address, notes FROM customers WHERE id = ?').get('cust-sensitive-1') as any;
+      expect(row.contact_name.startsWith('enc:')).toBe(true);
+      expect(row.phone.startsWith('enc:')).toBe(true);
+      expect(row.address.startsWith('enc:')).toBe(true);
+      expect(row.notes.startsWith('enc:')).toBe(true);
+      // No contiene texto en claro
+      expect(row.phone.includes('55 1234 5678')).toBe(false);
+      rawDb.close();
+
+      // Al cargar a través de LedgerStore, se descifran limpiamente
+      const store2 = createLedgerStore(dbPath);
+      const cust = store2.getDb().customers.find((c) => c.id === 'cust-sensitive-1');
+      expect(cust).toBeDefined();
+      expect(cust!.contactName).toBe('María García');
+      expect(cust!.phone).toBe('55 1234 5678');
+      expect(cust!.address).toBe('Av. Hidalgo 123, Col. Centro');
+      expect(cust!.notes).toBe('Cliente preferente con crédito');
+      store2.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
+
 
