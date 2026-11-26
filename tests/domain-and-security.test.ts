@@ -624,3 +624,41 @@ describe('Bodega avanzado: Tara de cartón 2 kg, medias cajas, bultos de azúcar
     expect(invRestored.find((i) => i.brandKey === 'azucar:azucar estandar')!.boxesAvailable).toBe(15);
   });
 });
+
+describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y ticket oficial', () => {
+  it('Persiste tarifa especial y plazo de crédito en SQLite para sincronizar con Android', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-sync-fields-'));
+    const dbPath = path.join(tmpDir, 'sync-fields.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      const db1 = store1.getDb();
+      db1.customers.push({
+        id: 'cust-android-1',
+        businessName: 'Abarrotes El Sol',
+        contactName: 'Pedro',
+        phone: '5511223344',
+        address: 'Centro',
+        notes: '',
+        active: true,
+        createdByUserId: 'usr-owner-01',
+        mergedIntoCustomerId: null,
+        createdAtUtc: '2026-11-25T10:00:00Z',
+        specialPriceCentavosPerKg: 3550,
+        creditTermDays: 14,
+      });
+      store1.persist();
+      store1.close();
+
+      const store2 = createLedgerStore(dbPath);
+      const c = store2.getDb().customers.find((item) => item.id === 'cust-android-1');
+      expect(c).toBeDefined();
+      expect(c!.specialPriceCentavosPerKg).toBe(3550);
+      expect(c!.creditTermDays).toBe(14);
+      store2.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+

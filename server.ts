@@ -14,6 +14,7 @@ import {
   calculateSugarLineSubtotalCentavos,
   calculateVendorClosing,
   deductCartonTareFromPerBoxWeights,
+  deductCartonTareWithModalities,
   formatCurrencyFromCentavos,
   formatFolio,
   formatKgFromGrams,
@@ -34,6 +35,7 @@ import {
   type Customer,
   type Delivery,
   type DeliveryBox,
+  type HalfBoxWeighType,
   type Payment,
   type WarehouseShipment,
   type WarehouseShipmentLine,
@@ -122,15 +124,34 @@ async function bootstrap() {
     }
   });
 
-  function broadcastEvent(type: string, payload: unknown) {
-    const msg = JSON.stringify({
+  function broadcastEvent(type: string, payload: unknown, targetUserId?: string) {
+    const timestampUtc = new Date().toISOString();
+    const ownerMsg = JSON.stringify({
       type,
       payload,
-      timestampUtc: new Date().toISOString(),
+      timestampUtc,
     });
+    const vendorSafeMsg = JSON.stringify({
+      type,
+      timestampUtc,
+    });
+    const ownerOnlyOrTargeted =
+      type === 'closing:created' ||
+      type === 'incident:updated' ||
+      type === 'vendor:updated' ||
+      type === 'device:authorized' ||
+      type === 'alert:acknowledged';
+
     for (const c of wsClients) {
-      if (c.ws.readyState === WebSocket.OPEN) {
-        c.ws.send(msg);
+      if (c.ws.readyState !== WebSocket.OPEN) continue;
+      if (c.role === 'dueno') {
+        c.ws.send(ownerMsg);
+      } else if (ownerOnlyOrTargeted) {
+        if (targetUserId && c.userId === targetUserId) {
+          c.ws.send(vendorSafeMsg);
+        }
+      } else {
+        c.ws.send(vendorSafeMsg);
       }
     }
   }
@@ -342,6 +363,58 @@ async function bootstrap() {
     res.json({ ok: true });
   });
 
+  app.post('/api/devices/register', syncLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
+    const db = store.getDb();
+    const user = db.users.find((u) => u.id === req.user!.sub);
+    if (!user || user.status !== 'activa') {
+      res.status(403).json({ error: 'Cuenta inactiva o bloqueada por el dueño.' });
+      return;
+    }
+
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
+    const deviceName = sanitizePlainText(req.body?.deviceName, 100) || 'Android';
+    if (!deviceId) {
+      res.status(400).json({ error: 'El identificador del dispositivo es obligatorio.' });
+      return;
+    }
+
+    const nowUtc = new Date().toISOString();
+    const existing = db.devices.find((d) => d.id === deviceId);
+    if (existing) {
+      if (existing.userId !== user.id) {
+        res.status(403).json({ error: 'Este equipo está vinculado a otra cuenta de usuario.' });
+        return;
+      }
+      existing.deviceName = deviceName;
+      existing.lastSyncUtc = nowUtc;
+      store.persist();
+      broadcastEvent('sync:state_updated', { entity: 'devices', deviceId });
+      res.json({ ok: true, device: existing });
+      return;
+    }
+
+    const newDevice = {
+      id: deviceId,
+      userId: user.id,
+      deviceName,
+      active: false,
+      lastSyncUtc: nowUtc,
+      pendingSyncCount: 0,
+    };
+    db.devices.push(newDevice);
+    store.addAudit(
+      'devices',
+      newDevice.id,
+      'REGISTRAR_DISPOSITIVO',
+      `Teléfono registrado para aprobación: ${deviceName} (${user.name})`,
+      user.id,
+      user.name
+    );
+    store.persist();
+    broadcastEvent('sync:state_updated', { entity: 'devices', deviceId });
+    res.status(201).json({ ok: true, device: newDevice });
+  });
+
   app.post('/api/devices/:id/authorize', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
     const target = db.devices.find((d) => d.id === req.params.id);
@@ -366,7 +439,8 @@ async function bootstrap() {
       req.user!.name
     );
     store.persist();
-    broadcastEvent('sync:state_updated', { entity: 'devices' });
+    broadcastEvent('device:authorized', { userId: target.userId, deviceId: target.id }, target.userId);
+    broadcastEvent('sync:state_updated', { entity: 'devices' }, target.userId);
     res.json({ ok: true });
   });
 
@@ -550,9 +624,35 @@ async function bootstrap() {
     const phone = normalizePhone(sanitizePlainText(req.body?.phone, 20));
     const address = sanitizePlainText(req.body?.address, 200);
     const notes = sanitizePlainText(req.body?.notes, 240);
+    const rawSpecialPrice = req.body?.specialPricePesosPerKg;
+    const specialPriceCentavosPerKg =
+      rawSpecialPrice !== undefined && rawSpecialPrice !== null && rawSpecialPrice !== ''
+        ? Math.round(Number(rawSpecialPrice) * 100)
+        : null;
+    const rawCreditDays = req.body?.creditTermDays;
+    const creditTermDays =
+      rawCreditDays !== undefined && rawCreditDays !== null && rawCreditDays !== ''
+        ? Math.round(Number(rawCreditDays))
+        : null;
 
     if (!businessName) {
       res.status(400).json({ error: 'El nombre del negocio es obligatorio.' });
+      return;
+    }
+    if (
+      specialPriceCentavosPerKg !== null &&
+      (!Number.isInteger(specialPriceCentavosPerKg) ||
+        specialPriceCentavosPerKg <= 0 ||
+        specialPriceCentavosPerKg > 50_000)
+    ) {
+      res.status(400).json({ error: 'El precio especial debe ser mayor a $0.' });
+      return;
+    }
+    if (
+      creditTermDays !== null &&
+      (!Number.isInteger(creditTermDays) || creditTermDays < 0 || creditTermDays > 3650)
+    ) {
+      res.status(400).json({ error: 'El plazo de crédito debe estar entre 0 y 3650 días.' });
       return;
     }
 
@@ -568,6 +668,8 @@ async function bootstrap() {
       createdByUserId: req.user!.sub,
       mergedIntoCustomerId: null,
       createdAtUtc: new Date().toISOString(),
+      specialPriceCentavosPerKg,
+      creditTermDays,
     };
     db.customers.push(customer);
     store.addAudit(
@@ -581,6 +683,78 @@ async function bootstrap() {
     store.persist();
     broadcastEvent('sync:state_updated', { entity: 'customers' });
     res.status(201).json({ customer });
+  });
+
+  app.patch('/api/customers/:id', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    const db = store.getDb();
+    const customer = db.customers.find(
+      (c) => c.id === req.params.id && !c.mergedIntoCustomerId
+    );
+    if (!customer) {
+      res.status(404).json({ error: 'Cliente no encontrado.' });
+      return;
+    }
+
+    if (req.body?.businessName !== undefined) {
+      const nextName = sanitizePlainText(req.body.businessName, 120);
+      if (!nextName) {
+        res.status(400).json({ error: 'El nombre del negocio no puede estar vacío.' });
+        return;
+      }
+      customer.businessName = nextName;
+    }
+    if (req.body?.contactName !== undefined) {
+      customer.contactName = sanitizePlainText(req.body.contactName, 100);
+    }
+    if (req.body?.phone !== undefined) {
+      customer.phone = normalizePhone(sanitizePlainText(req.body.phone, 20));
+    }
+    if (req.body?.address !== undefined) {
+      customer.address = sanitizePlainText(req.body.address, 200);
+    }
+    if (req.body?.notes !== undefined) {
+      customer.notes = sanitizePlainText(req.body.notes, 240);
+    }
+
+    if (req.body?.specialPricePesosPerKg !== undefined) {
+      const rawSpecial = req.body.specialPricePesosPerKg;
+      if (rawSpecial === null || rawSpecial === '') {
+        customer.specialPriceCentavosPerKg = null;
+      } else {
+        const parsed = Math.round(Number(rawSpecial) * 100);
+        if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 50_000) {
+          res.status(400).json({ error: 'El precio especial debe ser mayor a $0.' });
+          return;
+        }
+        customer.specialPriceCentavosPerKg = parsed;
+      }
+    }
+
+    if (req.body?.creditTermDays !== undefined) {
+      const rawDays = req.body.creditTermDays;
+      if (rawDays === null || rawDays === '') {
+        customer.creditTermDays = null;
+      } else {
+        const parsedDays = Math.round(Number(rawDays));
+        if (!Number.isInteger(parsedDays) || parsedDays < 0 || parsedDays > 3650) {
+          res.status(400).json({ error: 'El plazo de crédito debe estar entre 0 y 3650 días.' });
+          return;
+        }
+        customer.creditTermDays = parsedDays;
+      }
+    }
+
+    store.addAudit(
+      'customers',
+      customer.id,
+      'ACTUALIZAR_CLIENTE',
+      `Cliente actualizado: ${customer.businessName}${customer.specialPriceCentavosPerKg ? ` (Tarifa: ${formatCurrencyFromCentavos(customer.specialPriceCentavosPerKg)}/kg)` : ''}`,
+      req.user!.sub,
+      req.user!.name
+    );
+    store.persist();
+    broadcastEvent('sync:state_updated', { entity: 'customers', customerId: customer.id });
+    res.json({ ok: true, customer });
   });
 
   app.post('/api/customers/:id/payments', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
@@ -725,7 +899,7 @@ async function bootstrap() {
       req.user!.name
     );
     store.persist();
-    broadcastEvent('incident:updated', { incidentId: incident.id, status: 'revisado' });
+    broadcastEvent('incident:updated', { incidentId: incident.id, status: 'revisado' }, incident.vendorId);
     res.json({ ok: true, incident });
   });
 
@@ -792,7 +966,7 @@ async function bootstrap() {
       req.user!.name
     );
     store.persist();
-    broadcastEvent('closing:created', closing);
+    broadcastEvent('closing:created', closing, vendor.id);
     res.status(201).json({ closing });
   });
 
@@ -1284,8 +1458,18 @@ async function bootstrap() {
               });
               return;
             }
+            const halfBoxWeighType: HalfBoxWeighType =
+              raw.halfBoxWeighType === 'partida'
+                ? 'partida'
+                : raw.halfBoxWeighType === 'pesada'
+                  ? 'pesada'
+                  : 'directa';
             try {
-              const tareResult = deductCartonTareFromPerBoxWeights(grossFullGrams, grossHalfGrams);
+              const tareResult = deductCartonTareWithModalities(
+                grossFullGrams,
+                grossHalfGrams,
+                halfBoxWeighType
+              );
               netBoxesGrams = tareResult.netBoxesGrams;
               tareGrams = tareResult.tareGrams;
             } catch (err) {
@@ -1524,8 +1708,63 @@ async function bootstrap() {
     });
   });
 
-  // Android Real-Time Sync Endpoints (POST /api/sync/push & GET /api/sync/pull)
-  // Supports both real Android apps (role: vendedor) and live Owner simulation test
+  // Android Real-Time Sync Endpoints:
+  // POST /api/sync/folios/reserve, POST /api/sync/push, GET /api/sync/pull
+  app.post('/api/sync/folios/reserve', syncLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
+    const db = store.getDb();
+    const vendor = db.users.find((u) => u.id === req.user!.sub && u.role === 'vendedor');
+    if (!vendor) {
+      res.status(403).json({ error: 'Solo las cuentas de vendedor pueden reservar folios de ruta.' });
+      return;
+    }
+    if (vendor.status !== 'activa' || !vendor.folioSeries) {
+      res.status(403).json({ error: 'La cuenta del vendedor no está aprobada o está bloqueada.' });
+      return;
+    }
+
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
+    if (!deviceId) {
+      res.status(400).json({ error: 'El identificador del dispositivo es obligatorio.' });
+      return;
+    }
+    const device = db.devices.find((d) => d.id === deviceId && d.userId === vendor.id);
+    if (!device || !device.active) {
+      res.status(403).json({
+        error: 'Este teléfono aún no está autorizado por el dueño en Windows (Vendedores).',
+      });
+      return;
+    }
+
+    const requestedCount = Number(req.body?.count ?? 100);
+    const count =
+      Number.isInteger(requestedCount) && requestedCount >= 1 && requestedCount <= 200
+        ? requestedCount
+        : 100;
+
+    const folios: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const next = store.reserveNextFolio(vendor.folioSeries);
+      folios.push(next.folioNumber);
+    }
+    device.lastSyncUtc = new Date().toISOString();
+
+    store.addAudit(
+      'devices',
+      device.id,
+      'RESERVAR_FOLIOS',
+      `${vendor.name} reservó ${folios.length} folios serie ${vendor.folioSeries} (${folios[0]}..${folios[folios.length - 1]})`,
+      vendor.id,
+      vendor.name
+    );
+    store.persist();
+    broadcastEvent('sync:state_updated', { entity: 'folios', vendorId: vendor.id });
+    res.json({
+      ok: true,
+      folioSeries: vendor.folioSeries,
+      folios,
+    });
+  });
+
   app.post('/api/sync/push', syncLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
     const isOwnerSim = req.user!.role === 'dueno' && req.body?.simulateFromVendorId;
@@ -1539,6 +1778,19 @@ async function bootstrap() {
     if (vendor.status !== 'activa' || !vendor.folioSeries) {
       res.status(403).json({ error: 'La cuenta del vendedor no está aprobada o está bloqueada.' });
       return;
+    }
+
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80) || 'android-app';
+    let registeredDevice = db.devices.find((d) => d.id === deviceId && d.userId === vendor.id);
+    if (!isOwnerSim) {
+      if (!registeredDevice || !registeredDevice.active) {
+        res.status(403).json({
+          error: 'Este teléfono no está autorizado como equipo activo del vendedor en Windows.',
+        });
+        return;
+      }
+    } else if (!registeredDevice) {
+      registeredDevice = db.devices.find((d) => d.userId === vendor.id && d.active);
     }
 
     const incomingDeliveries = Array.isArray(req.body?.deliveries)
@@ -1556,11 +1808,16 @@ async function bootstrap() {
 
     let acceptedDeliveries = 0;
     let skippedDuplicates = 0;
+    const acceptedDeliveryIds: string[] = [];
+    const acceptedPaymentIds: string[] = [];
+    const acceptedLossIds: string[] = [];
+    const acceptedIncidentIds: string[] = [];
     const nowUtc = new Date().toISOString();
 
     for (const rawDel of incomingDeliveries) {
       const delId = sanitizePlainText(rawDel.id, 80) || `del-${crypto.randomUUID()}`;
       if (db.deliveries.some((d) => d.id === delId)) {
+        acceptedDeliveryIds.push(delId);
         skippedDuplicates++;
         continue;
       }
@@ -1573,25 +1830,260 @@ async function bootstrap() {
       }
       if (!customer || customer.mergedIntoCustomerId) continue;
 
-      const boxesGrams: number[] = Array.isArray(rawDel.boxesGrams)
-        ? rawDel.boxesGrams.slice(0, 500).map((g: unknown) => Math.round(Number(g)))
-        : [];
-      if (
-        boxesGrams.length === 0 ||
-        boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)
-      ) {
-        continue;
-      }
+      const rawItems = Array.isArray(rawDel.items) ? rawDel.items.slice(0, 500) : [];
+      const rawSugar =
+        rawDel.sugar && typeof rawDel.sugar === 'object' ? rawDel.sugar : null;
 
-      const priceCentavosPerKg = Math.round(Number(rawDel.priceCentavosPerKg));
-      if (!Number.isInteger(priceCentavosPerKg) || priceCentavosPerKg <= 0 || priceCentavosPerKg > 50_000) {
-        continue;
-      }
-      let calc;
-      try {
-        calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
-      } catch {
-        continue;
+      let allBoxesGrams: number[] = [];
+      let totalGrams = 0;
+      let calculatedTotalExactMilliCentavos = 0;
+      let totalToChargeCentavos = 0;
+      let effectivePriceCentavosPerKg = 0;
+      let boxesCountTotal = 0;
+      let resolvedBrandKey: string | undefined;
+      let resolvedBrandName: string | undefined;
+      let builtSaleItems: BodegaSaleItem[] | undefined;
+
+      if (rawItems.length > 0 || rawSugar) {
+        const saleItems: BodegaSaleItem[] = [];
+        const fallbackPriceCentavos = Math.round(Number(rawDel.priceCentavosPerKg) || 0);
+        let totalRawMilliCentavos = 0n;
+        let invalidLine = false;
+
+        // Group egg weighed items by (brandKey, unitPriceCentavos) so inventory & breakdown stay compact and exact
+        const eggGroups = new Map<
+          string,
+          {
+            brandKey: string;
+            brandName: string;
+            unitPriceCentavos: number;
+            fullBoxes: number;
+            halfBoxes: number;
+            tareGrams: number;
+            totalGrams: number;
+            boxesGrams: number[];
+          }
+        >();
+
+        for (const item of rawItems) {
+          const itemBrandName =
+            sanitizePlainText(item?.brand, 80) ||
+            sanitizePlainText(rawDel.brandName, 80) ||
+            'General';
+          const itemBrandKey = normalizeProductKey(itemBrandName, 'huevo') || 'general';
+          const netKg = Number(item?.netWeightKg);
+          const itemGrams = Math.round(netKg * 1000);
+          const tareKg = Number(item?.tareDeductionKg ?? 0);
+          const itemTareGrams = Number.isFinite(tareKg) && tareKg > 0 ? Math.round(tareKg * 1000) : 0;
+          const boxesDec = roundHalfUnits(Number(item?.boxesDecimal ?? 1));
+          const itemPricePerKg = Number(item?.pricePerKg);
+          const itemUnitPriceCentavos =
+            Number.isFinite(itemPricePerKg) && itemPricePerKg > 0
+              ? Math.round(itemPricePerKg * 100)
+              : fallbackPriceCentavos;
+
+          if (
+            !Number.isInteger(itemGrams) ||
+            itemGrams <= 0 ||
+            itemGrams > 50_000_000 ||
+            !Number.isFinite(boxesDec) ||
+            boxesDec <= 0 ||
+            boxesDec > 5000 ||
+            !Number.isInteger(itemUnitPriceCentavos) ||
+            itemUnitPriceCentavos <= 0 ||
+            itemUnitPriceCentavos > 50_000
+          ) {
+            invalidLine = true;
+            break;
+          }
+
+          const fullPart = Math.floor(boxesDec + 1e-6);
+          const halfPart = Math.abs(boxesDec - fullPart - 0.5) < 1e-6 ? 1 : 0;
+          const perBoxList = splitTotalGramsIntoHalfAwareBoxes(
+            itemGrams,
+            Math.max(0, fullPart),
+            halfPart
+          );
+
+          const gKey = `${itemBrandKey}::${itemUnitPriceCentavos}`;
+          const prev = eggGroups.get(gKey);
+          if (!prev) {
+            eggGroups.set(gKey, {
+              brandKey: itemBrandKey,
+              brandName: itemBrandName,
+              unitPriceCentavos: itemUnitPriceCentavos,
+              fullBoxes: fullPart,
+              halfBoxes: halfPart,
+              tareGrams: itemTareGrams,
+              totalGrams: itemGrams,
+              boxesGrams: [...perBoxList],
+            });
+          } else {
+            prev.fullBoxes += fullPart;
+            prev.halfBoxes += halfPart;
+            prev.tareGrams += itemTareGrams;
+            prev.totalGrams += itemGrams;
+            prev.boxesGrams.push(...perBoxList);
+          }
+        }
+
+        if (invalidLine) continue;
+
+        for (const grp of eggGroups.values()) {
+          const calcGrp = calculateDeliveryTotals(grp.boxesGrams, grp.unitPriceCentavos);
+          totalRawMilliCentavos += BigInt(calcGrp.calculatedExactMilliCentavos);
+          totalGrams += calcGrp.totalGrams;
+          allBoxesGrams.push(...grp.boxesGrams);
+          const qty = roundHalfUnits(grp.fullBoxes + grp.halfBoxes * 0.5);
+          boxesCountTotal = roundHalfUnits(boxesCountTotal + qty);
+          saleItems.push({
+            id: `bsi-${crypto.randomUUID()}`,
+            productType: 'huevo',
+            brandKey: grp.brandKey,
+            brandName: grp.brandName,
+            fullBoxes: grp.fullBoxes,
+            halfBoxes: grp.halfBoxes,
+            quantity: qty,
+            tareGrams: grp.tareGrams,
+            totalGrams: calcGrp.totalGrams,
+            unitPriceCentavos: grp.unitPriceCentavos,
+            isSpecialPrice: Boolean(rawDel.isSpecialPrice),
+            subtotalCentavos: calcGrp.totalToChargeCentavos,
+            calculatedExactLabel: calcGrp.calculatedExactLabel,
+            boxesGrams: grp.boxesGrams,
+          });
+        }
+
+        if (rawSugar) {
+          const sacks = Number(rawSugar.sacks);
+          const weightPerSackKg = Number(rawSugar.weightPerSackKg);
+          const pricePerSackMxn = Number(rawSugar.pricePerSackMxn);
+          if (
+            !Number.isFinite(sacks) ||
+            sacks <= 0 ||
+            sacks > 5000 ||
+            !Number.isFinite(weightPerSackKg) ||
+            weightPerSackKg <= 0 ||
+            weightPerSackKg > 500 ||
+            !Number.isFinite(pricePerSackMxn) ||
+            pricePerSackMxn <= 0 ||
+            pricePerSackMxn > 500_000
+          ) {
+            continue;
+          }
+          const sugarGrams = Math.round(sacks * weightPerSackKg * 1000);
+          const pricePerBultoCentavos = Math.round(pricePerSackMxn * 100);
+          const sugarSubtotalCentavos = Math.round(sacks * pricePerBultoCentavos);
+          const explicitSugarBrand = sanitizePlainText(rawSugar.brandName, 80);
+          let sugarBrandName = explicitSugarBrand || 'Azúcar';
+          let sugarBrandKey = normalizeProductKey(sugarBrandName, 'azucar') || 'azucar:azucar';
+          if (!explicitSugarBrand) {
+            const warehouseInv = calculateBrandInventory(
+              db.warehouseShipments,
+              db.deliveries,
+              db.deliveryBoxes
+            );
+            const activeSugar =
+              warehouseInv.find((i) => i.productType === 'azucar' && i.boxesAvailable > 0) ??
+              warehouseInv.find((i) => i.productType === 'azucar' && i.boxesArrived > 0);
+            if (activeSugar) {
+              sugarBrandName = activeSugar.brandName;
+              sugarBrandKey = activeSugar.brandKey;
+            }
+          }
+          const sugarBoxes = Number.isInteger(sacks)
+            ? splitTotalGramsIntoHalfAwareBoxes(sugarGrams, sacks, 0)
+            : [sugarGrams];
+
+          totalRawMilliCentavos += BigInt(sugarSubtotalCentavos) * 1000n;
+          totalGrams += sugarGrams;
+          allBoxesGrams.push(...sugarBoxes);
+          boxesCountTotal = roundHalfUnits(boxesCountTotal + sacks);
+
+          saleItems.push({
+            id: `bsi-${crypto.randomUUID()}`,
+            productType: 'azucar',
+            brandKey: sugarBrandKey,
+            brandName: sugarBrandName,
+            fullBoxes: Math.floor(sacks),
+            halfBoxes: 0,
+            quantity: sacks,
+            tareGrams: 0,
+            totalGrams: sugarGrams,
+            unitPriceCentavos: pricePerBultoCentavos,
+            isSpecialPrice: false,
+            subtotalCentavos: sugarSubtotalCentavos,
+            boxesGrams: sugarBoxes,
+          });
+        }
+
+        if (saleItems.length === 0 || totalGrams <= 0) continue;
+
+        // Official rounding rule on combined exact millicentavos
+        const pesos = totalRawMilliCentavos / 100000n;
+        const rem = totalRawMilliCentavos % 100000n;
+        if (rem < 50000n) {
+          totalToChargeCentavos = Number(pesos * 100n);
+        } else if (rem === 50000n) {
+          totalToChargeCentavos = Number(pesos * 100n + 50n);
+        } else {
+          totalToChargeCentavos = Number((pesos + 1n) * 100n);
+        }
+        calculatedTotalExactMilliCentavos = Number(totalRawMilliCentavos);
+
+        const singleEgg =
+          saleItems.length === 1 && saleItems[0].productType === 'huevo'
+            ? saleItems[0]
+            : null;
+        effectivePriceCentavosPerKg = singleEgg
+          ? singleEgg.unitPriceCentavos
+          : Math.max(1, Math.round((totalToChargeCentavos * 1000) / totalGrams));
+
+        builtSaleItems = saleItems;
+        resolvedBrandKey = saleItems.length === 1 ? saleItems[0].brandKey : 'multi';
+        resolvedBrandName = saleItems
+          .map((it) =>
+            it.productType === 'azucar'
+              ? `${it.brandName} (${it.quantity} bultos)`
+              : `${it.brandName} (${it.quantity} cjs)`
+          )
+          .join(', ');
+      } else {
+        // Legacy flat boxesGrams payload (used by simulateAndroidSync & legacy clients)
+        const boxesGrams: number[] = Array.isArray(rawDel.boxesGrams)
+          ? rawDel.boxesGrams.slice(0, 500).map((g: unknown) => Math.round(Number(g)))
+          : [];
+        if (
+          boxesGrams.length === 0 ||
+          boxesGrams.some((g) => !Number.isInteger(g) || g <= 0 || g > 200_000)
+        ) {
+          continue;
+        }
+
+        const priceCentavosPerKg = Math.round(Number(rawDel.priceCentavosPerKg));
+        if (
+          !Number.isInteger(priceCentavosPerKg) ||
+          priceCentavosPerKg <= 0 ||
+          priceCentavosPerKg > 50_000
+        ) {
+          continue;
+        }
+        let calc;
+        try {
+          calc = calculateDeliveryTotals(boxesGrams, priceCentavosPerKg);
+        } catch {
+          continue;
+        }
+
+        allBoxesGrams = boxesGrams;
+        totalGrams = calc.totalGrams;
+        calculatedTotalExactMilliCentavos = calc.calculatedExactMilliCentavos;
+        totalToChargeCentavos = calc.totalToChargeCentavos;
+        effectivePriceCentavosPerKg = priceCentavosPerKg;
+        boxesCountTotal = boxesGrams.length;
+        const rawBrandName = sanitizePlainText(rawDel.brandName, 80);
+        resolvedBrandName = rawBrandName || undefined;
+        resolvedBrandKey = rawBrandName ? normalizeBrandName(rawBrandName) : undefined;
       }
 
       const folioInfo =
@@ -1604,14 +2096,19 @@ async function bootstrap() {
             }
           : store.reserveNextFolio(vendor.folioSeries);
 
-      // Avoid duplicate folio collision
+      // Avoid duplicate folio collision (advance server folio sequence past reserved number if needed)
       if (db.deliveries.some((d) => d.folioFormatted === folioInfo.folioFormatted)) {
         skippedDuplicates++;
         continue;
       }
+      const nextSeriesSeq = db.settings.nextFolioBySeries[vendor.folioSeries] ?? 1;
+      if (folioInfo.folioNumber >= nextSeriesSeq) {
+        db.settings.nextFolioBySeries[vendor.folioSeries] = folioInfo.folioNumber + 1;
+      }
 
-      const rawBrandName = sanitizePlainText(rawDel.brandName, 80);
-      const brandKey = rawBrandName ? normalizeBrandName(rawBrandName) : undefined;
+      const rawCreatedAt = sanitizePlainText(rawDel.createdAtUtc, 40);
+      const safeCreatedAtUtc =
+        rawCreatedAt && !Number.isNaN(Date.parse(rawCreatedAt)) ? rawCreatedAt : nowUtc;
 
       const delivery: Delivery = {
         id: delId,
@@ -1620,30 +2117,31 @@ async function bootstrap() {
         workdayId: sanitizePlainText(rawDel.workdayId, 60) || `wd-${vendor.id}`,
         driverName: sanitizePlainText(rawDel.driverName, 80) || 'Chofer de ruta',
         helpersNames: Array.isArray(rawDel.helpersNames)
-          ? rawDel.helpersNames.map((h: unknown) => sanitizePlainText(h, 60))
+          ? rawDel.helpersNames.map((h: unknown) => sanitizePlainText(h, 60)).filter(Boolean)
           : [],
         series: vendor.folioSeries,
         folioNumber: folioInfo.folioNumber,
         folioFormatted: folioInfo.folioFormatted,
         customerId: customer.id,
         customerName: customer.businessName,
-        createdAtUtc: sanitizePlainText(rawDel.createdAtUtc, 40) || nowUtc,
-        priceCentavosPerKg,
+        createdAtUtc: safeCreatedAtUtc,
+        priceCentavosPerKg: effectivePriceCentavosPerKg,
         isSpecialPrice: Boolean(rawDel.isSpecialPrice),
-        totalGrams: calc.totalGrams,
-        calculatedTotalExactMilliCentavos: calc.calculatedExactMilliCentavos,
-        totalToChargeCentavos: calc.totalToChargeCentavos,
+        totalGrams,
+        calculatedTotalExactMilliCentavos,
+        totalToChargeCentavos,
         status: 'vigente',
         cancellationReason: null,
         syncedAtUtc: nowUtc,
         sourceType: 'ruta',
-        brandKey,
-        brandName: rawBrandName || undefined,
-        boxesCount: boxesGrams.length,
+        brandKey: resolvedBrandKey,
+        brandName: resolvedBrandName,
+        boxesCount: boxesCountTotal,
+        ...(builtSaleItems ? { saleItems: builtSaleItems } : {}),
       };
       db.deliveries.unshift(delivery);
 
-      boxesGrams.forEach((wg, i) => {
+      allBoxesGrams.forEach((wg, i) => {
         const box: DeliveryBox = {
           id: `box-${crypto.randomUUID()}`,
           deliveryId: delivery.id,
@@ -1658,10 +2156,10 @@ async function bootstrap() {
           id: `evt-${crypto.randomUUID()}`,
           deliveryId: delivery.id,
           eventType: 'creacion',
-          detail: `Entrega ${delivery.folioFormatted} registrada (${boxesGrams.length} cajas)`,
+          detail: `Entrega ${delivery.folioFormatted} registrada (${boxesCountTotal} cjs/bultos · ${formatKgFromGrams(totalGrams)})`,
           actorUserId: vendor.id,
           actorName: vendor.name,
-          deviceId: sanitizePlainText(req.body?.deviceId, 80) || 'android-app',
+          deviceId,
           occurredAtUtc: delivery.createdAtUtc,
           arrivedAtServerUtc: nowUtc,
         },
@@ -1672,17 +2170,21 @@ async function bootstrap() {
           detail: 'Sincronizado en tiempo real hacia backend y Windows',
           actorUserId: vendor.id,
           actorName: vendor.name,
-          deviceId: sanitizePlainText(req.body?.deviceId, 80) || 'android-app',
+          deviceId,
           occurredAtUtc: nowUtc,
           arrivedAtServerUtc: nowUtc,
         }
       );
+      acceptedDeliveryIds.push(delId);
       acceptedDeliveries++;
     }
 
     for (const rawPay of incomingPayments) {
       const payId = sanitizePlainText(rawPay.id, 80) || `pay-${crypto.randomUUID()}`;
-      if (db.payments.some((p) => p.id === payId)) continue;
+      if (db.payments.some((p) => p.id === payId)) {
+        acceptedPaymentIds.push(payId);
+        continue;
+      }
       const method = rawPay.method === 'transferencia' ? 'transferencia' : 'efectivo';
       const amountCentavos = Math.round(Number(rawPay.amountCentavos));
       if (!Number.isInteger(amountCentavos) || amountCentavos <= 0 || amountCentavos > 100_000_000) continue;
@@ -1710,11 +2212,15 @@ async function bootstrap() {
         createdAtUtc: sanitizePlainText(rawPay.createdAtUtc, 40) || nowUtc,
         note: sanitizePlainText(rawPay.note, 160) || 'Cobro en ruta Android',
       });
+      acceptedPaymentIds.push(payId);
     }
 
     for (const rawLoss of incomingLosses) {
       const lossId = sanitizePlainText(rawLoss.id, 80) || `loss-${crypto.randomUUID()}`;
-      if (db.dailyLosses.some((l) => l.id === lossId)) continue;
+      if (db.dailyLosses.some((l) => l.id === lossId)) {
+        acceptedLossIds.push(lossId);
+        continue;
+      }
       const lostGrams = Math.round(Number(rawLoss.lostGrams));
       const note = sanitizePlainText(rawLoss.note, 200);
       if (Number.isInteger(lostGrams) && lostGrams > 0 && lostGrams <= 5_000_000 && note) {
@@ -1728,12 +2234,16 @@ async function bootstrap() {
           note,
           createdAtUtc: nowUtc,
         });
+        acceptedLossIds.push(lossId);
       }
     }
 
     for (const rawInc of incomingIncidents) {
       const incId = sanitizePlainText(rawInc.id, 80) || `inc-${crypto.randomUUID()}`;
-      if (db.moneyIncidents.some((i) => i.id === incId)) continue;
+      if (db.moneyIncidents.some((i) => i.id === incId)) {
+        acceptedIncidentIds.push(incId);
+        continue;
+      }
       const amountCentavos = Math.round(Number(rawInc.amountCentavos));
       const description = sanitizePlainText(rawInc.description, 200);
       const allowedTypes = new Set(['perdida', 'robo', 'faltante', 'otro'] as const);
@@ -1753,14 +2263,14 @@ async function bootstrap() {
           status: 'reportado',
           ownerNote: null,
         });
+        acceptedIncidentIds.push(incId);
       }
     }
 
     // Update vendor device lastSyncUtc
-    const activeDevice = db.devices.find((d) => d.userId === vendor.id && d.active);
-    if (activeDevice) {
-      activeDevice.lastSyncUtc = nowUtc;
-      activeDevice.pendingSyncCount = 0;
+    if (registeredDevice) {
+      registeredDevice.lastSyncUtc = nowUtc;
+      registeredDevice.pendingSyncCount = 0;
     }
 
     store.persist();
@@ -1770,7 +2280,17 @@ async function bootstrap() {
       acceptedDeliveries,
       skippedDuplicates,
     });
-    res.json({ ok: true, acceptedDeliveries, skippedDuplicates, syncedAtUtc: nowUtc });
+    broadcastEvent('bodega:updated', { source: 'android_sync', vendorId: vendor.id });
+    res.json({
+      ok: true,
+      acceptedDeliveries,
+      skippedDuplicates,
+      acceptedDeliveryIds,
+      acceptedPaymentIds,
+      acceptedLossIds,
+      acceptedIncidentIds,
+      syncedAtUtc: nowUtc,
+    });
   });
 
   app.get('/api/sync/pull', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -1787,12 +2307,45 @@ async function bootstrap() {
       return;
     }
 
+    let deviceAuthorized = true;
+    const queryDeviceId = sanitizePlainText(req.query.deviceId, 80);
+    if (user.role === 'vendedor' && queryDeviceId) {
+      const device = db.devices.find((d) => d.id === queryDeviceId && d.userId === user.id);
+      if (!device || !device.active) {
+        deviceAuthorized = false;
+        res.status(403).json({
+          error: 'Este teléfono aún no está autorizado por el dueño en Windows (Vendedores).',
+          accountStatus: user.status,
+          deviceAuthorized: false,
+        });
+        return;
+      }
+      device.lastSyncUtc = new Date().toISOString();
+      store.persist();
+    }
+
+    const inventory = calculateBrandInventory(
+      db.warehouseShipments,
+      db.deliveries,
+      db.deliveryBoxes
+    );
+    const activeCustomers = db.customers
+      .filter((c) => !c.mergedIntoCustomerId && c.active)
+      .map((c) => ({
+        ...c,
+        activeDebtCentavos: calculateCustomerLedger(c.id, db.deliveries, db.payments)
+          .balanceCentavos,
+      }));
+
     res.json({
       serverTimeUtc: new Date().toISOString(),
       accountStatus: user.status,
+      deviceAuthorized,
       folioSeries: user.folioSeries ?? null,
       dailyPrice: latestPrice ?? null,
-      customers: db.customers.filter((c) => !c.mergedIntoCustomerId && c.active),
+      customers: activeCustomers,
+      inventory,
+      crewMembers: db.crewMembers.filter((m) => m.active),
       settings: {
         businessName: db.settings.businessName,
         slogan: db.settings.slogan,

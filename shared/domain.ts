@@ -68,6 +68,8 @@ export interface Customer {
   createdByUserId: string;
   mergedIntoCustomerId: string | null;
   createdAtUtc: string;
+  specialPriceCentavosPerKg?: number | null;
+  creditTermDays?: number | null;
 }
 
 export interface DailyPrice {
@@ -90,9 +92,11 @@ export interface DeliveryBox {
 
 export type VehicleType = 'torton' | 'trailer';
 export type BodegaProductType = 'huevo' | 'azucar';
+export type HalfBoxWeighType = 'directa' | 'partida' | 'pesada';
 
 export const BOX_TARE_GRAMS = 2000;
 export const HALF_BOX_TARE_GRAMS = 1000;
+export const HALF_BOX_PESADA_TARE_GRAMS = 500;
 
 export interface WarehouseShipmentLine {
   id: string;
@@ -660,6 +664,21 @@ export function deductCartonTareFromPerBoxWeights(
   grossFullBoxesGrams: number[],
   grossHalfBoxesGrams: number[]
 ): { netBoxesGrams: number[]; tareGrams: number } {
+  return deductCartonTareWithModalities(grossFullBoxesGrams, grossHalfBoxesGrams, 'directa');
+}
+
+/**
+ * Descuenta tara de cartón en modo "peso por caja" con las 3 modalidades equivalentes a Android:
+ * - Caja completa: -2,000 g (2.00 kg)
+ * - Media caja 'directa': -1,000 g (1.00 kg)
+ * - Media caja 'partida' (caja partida a la mitad): (bruto - 2,000 g) / 2, tara contabilizada 1,000 g
+ * - Media caja 'pesada' (media caja pesada por separado): -500 g (0.50 kg)
+ */
+export function deductCartonTareWithModalities(
+  grossFullBoxesGrams: number[],
+  grossHalfBoxesGrams: number[],
+  halfBoxType: HalfBoxWeighType = 'directa'
+): { netBoxesGrams: number[]; tareGrams: number } {
   if (grossFullBoxesGrams.length + grossHalfBoxesGrams.length === 0) {
     throw new Error('Debe capturar al menos una caja o media caja.');
   }
@@ -679,13 +698,35 @@ export function deductCartonTareFromPerBoxWeights(
 
   for (let i = 0; i < grossHalfBoxesGrams.length; i++) {
     const gross = grossHalfBoxesGrams[i];
-    if (!Number.isInteger(gross) || gross <= HALF_BOX_TARE_GRAMS) {
-      throw new Error(
-        `La media caja #${i + 1} debe pesar más de 1.00 kg en bruto para descontar 1 kg de cartón.`
-      );
+    if (halfBoxType === 'partida') {
+      if (!Number.isInteger(gross) || gross <= BOX_TARE_GRAMS) {
+        throw new Error(
+          `La media caja partida #${i + 1} debe pesar más de 2.00 kg en bruto ((bruto - 2 kg) ÷ 2).`
+        );
+      }
+      const net = Math.round((gross - BOX_TARE_GRAMS) / 2);
+      if (net <= 0) {
+        throw new Error(`El peso neto calculado de la media caja partida #${i + 1} debe ser mayor a 0.`);
+      }
+      netBoxesGrams.push(net);
+      tareGrams += HALF_BOX_TARE_GRAMS;
+    } else if (halfBoxType === 'pesada') {
+      if (!Number.isInteger(gross) || gross <= HALF_BOX_PESADA_TARE_GRAMS) {
+        throw new Error(
+          `La media caja pesada #${i + 1} debe pesar más de 0.50 kg en bruto para descontar 0.50 kg.`
+        );
+      }
+      netBoxesGrams.push(gross - HALF_BOX_PESADA_TARE_GRAMS);
+      tareGrams += HALF_BOX_PESADA_TARE_GRAMS;
+    } else {
+      if (!Number.isInteger(gross) || gross <= HALF_BOX_TARE_GRAMS) {
+        throw new Error(
+          `La media caja #${i + 1} debe pesar más de 1.00 kg en bruto para descontar 1 kg de cartón.`
+        );
+      }
+      netBoxesGrams.push(gross - HALF_BOX_TARE_GRAMS);
+      tareGrams += HALF_BOX_TARE_GRAMS;
     }
-    netBoxesGrams.push(gross - HALF_BOX_TARE_GRAMS);
-    tareGrams += HALF_BOX_TARE_GRAMS;
   }
 
   return { netBoxesGrams, tareGrams };

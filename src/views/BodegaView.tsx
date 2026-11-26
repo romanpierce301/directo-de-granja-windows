@@ -13,11 +13,12 @@ import {
 } from 'lucide-react';
 import {
   BOX_TARE_GRAMS,
+  HALF_BOX_PESADA_TARE_GRAMS,
   HALF_BOX_TARE_GRAMS,
   calculateBrandInventory,
   calculateDeliveryTotals,
   calculateSugarLineSubtotalCentavos,
-  deductCartonTareFromPerBoxWeights,
+  deductCartonTareWithModalities,
   formatCurrencyFromCentavos,
   formatKgFromGrams,
   formatMexicoCityDate,
@@ -27,6 +28,7 @@ import {
   roundHalfUnits,
   splitTotalGramsIntoHalfAwareBoxes,
   type BodegaProductType,
+  type HalfBoxWeighType,
   type VehicleType,
 } from '../../shared/domain.ts';
 import { apiClient, type DashboardState } from '../services/apiClient.ts';
@@ -56,6 +58,7 @@ interface SaleItemDraft {
   fullBoxes: string;
   halfBoxes: string;
   weighMode: 'total' | 'cajas';
+  halfBoxWeighType: HalfBoxWeighType;
   totalKg: string;
   fullBoxesGrossKg: string[];
   halfBoxesGrossKg: string[];
@@ -66,7 +69,11 @@ interface SaleItemDraft {
   pricePerBultoPesos: string;
 }
 
-function createEmptyEggSaleItem(defaultBrandName: string, defaultPricePesos: string): SaleItemDraft {
+function createEmptyEggSaleItem(
+  defaultBrandName: string,
+  defaultPricePesos: string,
+  isSpecialPrice = false
+): SaleItemDraft {
   return {
     id: `sale-egg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     productType: 'huevo',
@@ -74,11 +81,12 @@ function createEmptyEggSaleItem(defaultBrandName: string, defaultPricePesos: str
     fullBoxes: '',
     halfBoxes: '0',
     weighMode: 'total',
+    halfBoxWeighType: 'directa',
     totalKg: '',
     fullBoxesGrossKg: [],
     halfBoxesGrossKg: [],
     pricePesosPerKg: defaultPricePesos,
-    isSpecialPrice: false,
+    isSpecialPrice,
     bultosCount: '',
     weightPerBultoKg: '',
     pricePerBultoPesos: '',
@@ -93,6 +101,7 @@ function createEmptySugarSaleItem(defaultSugarName: string, defaultWeightKg: str
     fullBoxes: '',
     halfBoxes: '0',
     weighMode: 'total',
+    halfBoxWeighType: 'directa',
     totalKg: '',
     fullBoxesGrossKg: [],
     halfBoxesGrossKg: [],
@@ -309,7 +318,11 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
           }
           const grossFull = item.fullBoxesGrossKg.map((w) => Math.round(Number(w) * 1000));
           const grossHalf = item.halfBoxesGrossKg.map((w) => Math.round(Number(w) * 1000));
-          const tareRes = deductCartonTareFromPerBoxWeights(grossFull, grossHalf);
+          const tareRes = deductCartonTareWithModalities(
+            grossFull,
+            grossHalf,
+            item.halfBoxWeighType ?? 'directa'
+          );
           netBoxesGrams = tareRes.netBoxesGrams;
           tareGrams = tareRes.tareGrams;
         } else {
@@ -457,10 +470,48 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
   };
 
   // --- Handlers: Form 2 (Multi-Item Bodega Sale) ---
+  const selectedCustomerObj = useMemo(
+    () =>
+      buyerMode === 'existente'
+        ? activeCustomers.find((c) => c.id === selectedCustomerId) ?? null
+        : null,
+    [buyerMode, activeCustomers, selectedCustomerId]
+  );
+
+  const effectiveBasePricePesos =
+    selectedCustomerObj?.specialPriceCentavosPerKg &&
+    selectedCustomerObj.specialPriceCentavosPerKg > 0
+      ? (selectedCustomerObj.specialPriceCentavosPerKg / 100).toFixed(2)
+      : defaultPricePesos;
+
+  const effectiveIsSpecial = Boolean(
+    selectedCustomerObj?.specialPriceCentavosPerKg &&
+      selectedCustomerObj.specialPriceCentavosPerKg > 0
+  );
+
+  const applyCustomerPriceToEggItems = (customerId: string) => {
+    const cust = activeCustomers.find((c) => c.id === customerId) ?? null;
+    const hasSpecial = Boolean(cust?.specialPriceCentavosPerKg && cust.specialPriceCentavosPerKg > 0);
+    const nextPrice = hasSpecial
+      ? ((cust!.specialPriceCentavosPerKg ?? 0) / 100).toFixed(2)
+      : defaultPricePesos;
+    setSaleItems((prev) =>
+      prev.map((it) =>
+        it.productType === 'huevo'
+          ? { ...it, pricePesosPerKg: nextPrice, isSpecialPrice: hasSpecial }
+          : it
+      )
+    );
+  };
+
   const handleAddEggSaleItem = () => {
     setSaleItems((prev) => [
       ...prev,
-      createEmptyEggSaleItem(availableEggs[0]?.brandName ?? '', defaultPricePesos),
+      createEmptyEggSaleItem(
+        availableEggs[0]?.brandName ?? '',
+        effectiveBasePricePesos,
+        effectiveIsSpecial
+      ),
     ]);
   };
 
@@ -580,7 +631,11 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
             return;
           }
           try {
-            deductCartonTareFromPerBoxWeights(fullGrossGrams, halfGrossGrams);
+            deductCartonTareWithModalities(
+              fullGrossGrams,
+              halfGrossGrams,
+              item.halfBoxWeighType ?? 'directa'
+            );
           } catch (err) {
             onNotify(`Huevo #${i + 1}: ${(err as Error).message}`);
             return;
@@ -591,6 +646,7 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
             fullBoxes,
             halfBoxes,
             weighMode: 'cajas',
+            halfBoxWeighType: item.halfBoxWeighType ?? 'directa',
             fullBoxesGrossGrams: fullGrossGrams,
             halfBoxesGrossGrams: halfGrossGrams,
             pricePesosPerKg: effPrice,
@@ -1154,13 +1210,17 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
               </div>
             </div>
           ) : (
-            <div className="text-xs">
+            <div className="text-xs space-y-1.5">
               <label className="block font-semibold text-[#4C3F63] dark:text-[#F4EFFF] mb-1">
                 Seleccione cliente existente
               </label>
               <select
                 value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setSelectedCustomerId(nextId);
+                  applyCustomerPriceToEggItems(nextId);
+                }}
                 required
                 className="input-recessed w-full rounded px-3 py-2 text-xs"
               >
@@ -1168,9 +1228,18 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
                 {activeCustomers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.businessName} {c.phone ? `(${c.phone})` : ''}
+                    {c.specialPriceCentavosPerKg
+                      ? ` · Tarifa: ${formatCurrencyFromCentavos(c.specialPriceCentavosPerKg, true)}/kg`
+                      : ''}
                   </option>
                 ))}
               </select>
+              {selectedCustomerObj?.specialPriceCentavosPerKg ? (
+                <p className="text-[11px] font-semibold text-[#D97706] dark:text-[#F59E0B]">
+                  Tarifa especial aplicada automáticamente:{' '}
+                  {formatCurrencyFromCentavos(selectedCustomerObj.specialPriceCentavosPerKg, true)}/kg
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -1525,9 +1594,58 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
                         <div className="space-y-2">
                           <div className="rounded border border-[#8A2BE2]/40 bg-[#8A2BE2]/10 px-2.5 py-1.5 text-[11px] text-[#681AB8] dark:text-[#C084FC]">
                             Capture el peso bruto en báscula: se descuentan automáticamente{' '}
-                            <strong>2.00 kg</strong> de cartón por cada caja completa y{' '}
-                            <strong>1.00 kg</strong> por cada media caja.
+                            <strong>2.00 kg</strong> de cartón por cada caja completa
+                            {safeHalf > 0 && (
+                              <>
+                                {' '}
+                                y{' '}
+                                <strong>
+                                  {item.halfBoxWeighType === 'partida'
+                                    ? '(bruto - 2.00 kg) ÷ 2'
+                                    : item.halfBoxWeighType === 'pesada'
+                                      ? '-0.50 kg (media caja pesada)'
+                                      : '-1.00 kg (tara directa)'}
+                                </strong>{' '}
+                                por cada media caja
+                              </>
+                            )}
+                            .
                           </div>
+
+                          {safeHalf > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-[#4C3F63] dark:text-[#9E8FB2]">
+                                Modalidad de media caja:
+                              </span>
+                              <TactileButton
+                                variant={item.halfBoxWeighType === 'directa' ? 'primary' : 'neutral'}
+                                size="sm"
+                                onClick={() =>
+                                  handleUpdateSaleItem(item.id, { halfBoxWeighType: 'directa' })
+                                }
+                              >
+                                Media directa (-1 kg)
+                              </TactileButton>
+                              <TactileButton
+                                variant={item.halfBoxWeighType === 'partida' ? 'primary' : 'neutral'}
+                                size="sm"
+                                onClick={() =>
+                                  handleUpdateSaleItem(item.id, { halfBoxWeighType: 'partida' })
+                                }
+                              >
+                                Media partida ((bruto - 2 kg) ÷ 2)
+                              </TactileButton>
+                              <TactileButton
+                                variant={item.halfBoxWeighType === 'pesada' ? 'primary' : 'neutral'}
+                                size="sm"
+                                onClick={() =>
+                                  handleUpdateSaleItem(item.id, { halfBoxWeighType: 'pesada' })
+                                }
+                              >
+                                Media pesada (-0.5 kg)
+                              </TactileButton>
+                            </div>
+                          )}
 
                           {safeFull + safeHalf > 200 ? (
                             <p className="text-[11px] text-[#E11D48] dark:text-[#F43F5E]">
@@ -1578,18 +1696,36 @@ export function BodegaView({ state, onRefresh, onNotify, onOpenTicket }: BodegaV
 
                               {item.halfBoxesGrossKg.map((val, halfIdx) => {
                                 const grossGrams = Math.round(Number(val) * 1000);
+                                const minGross =
+                                  item.halfBoxWeighType === 'partida'
+                                    ? 2.01
+                                    : item.halfBoxWeighType === 'pesada'
+                                      ? 0.51
+                                      : 1.01;
                                 const netGrams =
-                                  Number.isFinite(Number(val)) && grossGrams > HALF_BOX_TARE_GRAMS
-                                    ? grossGrams - HALF_BOX_TARE_GRAMS
-                                    : null;
+                                  !Number.isFinite(Number(val)) || grossGrams <= 0
+                                    ? null
+                                    : item.halfBoxWeighType === 'partida'
+                                      ? grossGrams > BOX_TARE_GRAMS
+                                        ? Math.round((grossGrams - BOX_TARE_GRAMS) / 2)
+                                        : null
+                                      : item.halfBoxWeighType === 'pesada'
+                                        ? grossGrams > HALF_BOX_PESADA_TARE_GRAMS
+                                          ? grossGrams - HALF_BOX_PESADA_TARE_GRAMS
+                                          : null
+                                        : grossGrams > HALF_BOX_TARE_GRAMS
+                                          ? grossGrams - HALF_BOX_TARE_GRAMS
+                                          : null;
                                 return (
                                   <div key={`half-${halfIdx}`}>
                                     <label className="block text-[10px] font-mono text-[#D97706] dark:text-[#F59E0B]">
-                                      Media {halfIdx + 1} bruto (kg)
+                                      {item.halfBoxWeighType === 'partida'
+                                        ? `Media ${halfIdx + 1} (caja completa kg)`
+                                        : `Media ${halfIdx + 1} bruto (kg)`}
                                     </label>
                                     <input
                                       type="number"
-                                      min={1.01}
+                                      min={minGross}
                                       step="0.01"
                                       value={val}
                                       onChange={(e) => {

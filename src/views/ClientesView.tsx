@@ -29,6 +29,13 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [newSpecialPrice, setNewSpecialPrice] = useState('');
+  const [newCreditDays, setNewCreditDays] = useState('');
+
+  // Edit customer special price & credit term fields
+  const [editingCustId, setEditingCustId] = useState<string | null>(null);
+  const [editSpecialPrice, setEditSpecialPrice] = useState('');
+  const [editCreditDays, setEditCreditDays] = useState('');
 
   // Abono posterior fields
   const [abonoPesos, setAbonoPesos] = useState('');
@@ -84,15 +91,41 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
   const handleCreateCustomer = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.createCustomer({ businessName, contactName, phone, address, notes });
+      await apiClient.createCustomer({
+        businessName,
+        contactName,
+        phone,
+        address,
+        notes,
+        specialPricePesosPerKg: newSpecialPrice.trim() ? Number(newSpecialPrice) : null,
+        creditTermDays: newCreditDays.trim() ? Number(newCreditDays) : null,
+      });
       setBusinessName('');
       setContactName('');
       setPhone('');
       setAddress('');
       setNotes('');
+      setNewSpecialPrice('');
+      setNewCreditDays('');
       setShowNew(false);
       await onRefresh();
-      onNotify('Cliente agregado al directorio compartido.');
+      onNotify('Cliente agregado al directorio compartido y sincronizado con ruta.');
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
+  };
+
+  const handleSaveCustomerTerms = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+    try {
+      await apiClient.updateCustomer(selectedCustomer.id, {
+        specialPricePesosPerKg: editSpecialPrice.trim() ? Number(editSpecialPrice) : null,
+        creditTermDays: editCreditDays.trim() ? Number(editCreditDays) : null,
+      });
+      setEditingCustId(null);
+      await onRefresh();
+      onNotify(`Tarifa y plazo actualizados para ${selectedCustomer.businessName}.`);
     } catch (err) {
       onNotify((err as Error).message);
     }
@@ -231,7 +264,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
       {showNew && (
         <form
           onSubmit={handleCreateCustomer}
-          className="glass-panel rounded-lg p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
+          className="glass-panel rounded-lg p-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end"
         >
           <div>
             <label className="block text-xs text-[#6B5B82] dark:text-[#D9CEEE] mb-1">
@@ -273,6 +306,37 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
               onChange={(e) => setAddress(e.target.value)}
               className="input-recessed w-full rounded px-3 py-1.5 text-xs"
             />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-[#6B5B82] dark:text-[#D9CEEE] mb-1">
+                Tarifa esp. ($/kg)
+              </label>
+              <input
+                type="number"
+                min={0.5}
+                step="0.01"
+                placeholder="Global"
+                value={newSpecialPrice}
+                onChange={(e) => setNewSpecialPrice(e.target.value)}
+                className="input-recessed w-full rounded px-2.5 py-1.5 text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[#6B5B82] dark:text-[#D9CEEE] mb-1">
+                Crédito (días)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={3650}
+                step={1}
+                placeholder="7"
+                value={newCreditDays}
+                onChange={(e) => setNewCreditDays(e.target.value)}
+                className="input-recessed w-full rounded px-2.5 py-1.5 text-xs font-mono"
+              />
+            </div>
           </div>
           <TactileButton type="submit" variant="emerald" size="sm">
             Guardar cliente
@@ -362,6 +426,84 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                     {formatCurrencyFromCentavos(selectedLedger.balanceCentavos)}
                   </div>
                 </div>
+              </div>
+
+              {/* Special tariff & credit term (synced in real time with Android) */}
+              <div className="pos-subpanel rounded-md p-3 space-y-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-semibold text-[#D97706] dark:text-[#F59E0B]">
+                      {selectedCustomer.specialPriceCentavosPerKg
+                        ? `Tarifa especial: ${formatCurrencyFromCentavos(selectedCustomer.specialPriceCentavosPerKg, true)}/kg`
+                        : 'Tarifa: Precio global del día'}
+                    </span>
+                    <span className="text-[#9E8FB2]">·</span>
+                    <span className="font-mono text-[#4B3969] dark:text-[#D9CEEE]">
+                      Plazo: {selectedCustomer.creditTermDays ?? 7} días
+                    </span>
+                  </div>
+                  <TactileButton
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => {
+                      if (editingCustId === selectedCustomer.id) {
+                        setEditingCustId(null);
+                      } else {
+                        setEditingCustId(selectedCustomer.id);
+                        setEditSpecialPrice(
+                          selectedCustomer.specialPriceCentavosPerKg
+                            ? (selectedCustomer.specialPriceCentavosPerKg / 100).toFixed(2)
+                            : ''
+                        );
+                        setEditCreditDays(
+                          selectedCustomer.creditTermDays !== null &&
+                            selectedCustomer.creditTermDays !== undefined
+                            ? String(selectedCustomer.creditTermDays)
+                            : ''
+                        );
+                      }
+                    }}
+                  >
+                    {editingCustId === selectedCustomer.id ? 'Cerrar' : 'Editar tarifa / plazo'}
+                  </TactileButton>
+                </div>
+
+                {editingCustId === selectedCustomer.id && (
+                  <form onSubmit={handleSaveCustomerTerms} className="grid grid-cols-3 gap-2 items-end pt-1">
+                    <div>
+                      <label className="block text-[11px] text-[#6B5B82] dark:text-[#9E8FB2] mb-1">
+                        Tarifa especial ($/kg)
+                      </label>
+                      <input
+                        type="number"
+                        min={0.5}
+                        step="0.01"
+                        placeholder="Vacío = global"
+                        value={editSpecialPrice}
+                        onChange={(e) => setEditSpecialPrice(e.target.value)}
+                        className="input-recessed w-full rounded px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-[#6B5B82] dark:text-[#9E8FB2] mb-1">
+                        Plazo (días)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={3650}
+                        step={1}
+                        placeholder="7"
+                        value={editCreditDays}
+                        onChange={(e) => setEditCreditDays(e.target.value)}
+                        className="input-recessed w-full rounded px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <TactileButton type="submit" variant="primary" size="sm">
+                      Guardar cambios
+                    </TactileButton>
+                  </form>
+                )}
               </div>
 
               {/* Registrar abono posterior */}

@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket 48 mm</title>
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  TICKET TÉRMICO 48 mm                             ║
+  ║  (zona imprimible de impresoras de papel 58 mm = 384 puntos)     ║
+  ╠══════════════════════════════════════════════════════════════════╣
+  ║  USO RÁPIDO                                                      ║
+  ║  1. Edita el bloque  const DATOS = {...}  (más abajo).           ║
+  ║  2. Abre el archivo en el navegador y pulsa "Imprimir".          ║
+  ║     - Destino: tu impresora térmica (papel 58 mm / área 48 mm)                     ║
+  ║     - Márgenes: Ninguno · Escala: 100 % · Sin encabezados        ║
+  ║                                                                  ║
+  ║  INTEGRACIÓN EN TU APP                                           ║
+  ║  El script expone  window.TicketLili  con:                       ║
+  ║    calcular(datos)            → modelo con todos los cálculos    ║
+  ║    renderHTML(datos)          → string HTML del ticket           ║
+  ║    renderTexto(datos, opts)   → texto plano de 32 columnas       ║
+  ║                                 (para ESC/POS / Bluetooth / USB) ║
+  ║    aLetras(monto)             → "Cinco mil ... 00/100 M.N."      ║
+  ║  También funciona en Node:  require('./ticket.js')  (copia el    ║
+  ║  bloque <script> a un .js).                                      ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+<style>
+  /* ── Variables de impresión (se sobrescriben desde DATOS.config) ──
+     --papel      : ancho de la HOJA que ve el driver.
+                    48mm → el driver define la hoja de 48 mm (lo más común
+                           en impresoras "58 mm" con 384 puntos).
+                    58mm → el driver define 58 mm: el ticket queda centrado.
+     --imprimible : zona realmente impresa (48 mm = 384 puntos a 203 dpi).
+     --seguro     : margen de seguridad por lado (muchas térmicas recortan
+                    el primer/último punto). Ponlo en 0mm si no lo necesitas.
+     --fs         : tamaño de letra (2.35 mm ≈ 32 columnas en 46 mm). */
+  :root { --papel: 48mm; --imprimible: 48mm; --seguro: 1mm; --fs: 2.35mm; }
+
+  @page { size: 48mm 200mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    background: #d9dbe3; color: #000;
+    font-family: 'DejaVu Sans Mono', 'Consolas', 'Courier New', monospace;
+    font-size: var(--fs); line-height: 1.32;
+  }
+
+  .toolbar { display: flex; justify-content: center; gap: 8px; margin: 14px 0 10px; }
+  .toolbar button {
+    background: #8a4b00; color: #fff; border: 0; border-radius: 5px; padding: 9px 16px;
+    font-weight: 700; font-size: 13px; cursor: pointer; font-family: system-ui, sans-serif;
+  }
+  .toolbar button:hover { background: #6f3c00; }
+
+  .papel {
+    width: var(--papel); margin: 0 auto 30px; background: #fff;
+    padding: 3mm calc((var(--papel) - var(--imprimible)) / 2 + var(--seguro)) 8mm;
+    box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  }
+  /* Vista en pantalla: se ve más grande para revisarlo */
+  @media screen { .papel { zoom: 2.2; } }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .papel { box-shadow: none; margin: 0; zoom: 1; }
+  }
+
+  /* ── Contenido ── */
+  .c { text-align: center; }
+  .b { font-weight: 700; }
+  .xl { font-size: 1.45em; font-weight: 800; letter-spacing: .02em; }
+  .lg { font-size: 1.15em; font-weight: 700; }
+  .sm { font-size: .88em; }
+  .logo { display: block; width: 100%; height: auto; image-rendering: pixelated; margin: 0 auto 1.2mm; }
+  .sep    { border: 0; border-top: .25mm dashed #000; margin: 1.6mm 0; }
+  .sep.d  { border-top: .5mm solid #000; }
+  .row    { display: flex; justify-content: space-between; gap: 2mm; align-items: baseline; }
+  .row .v { text-align: right; white-space: nowrap; font-weight: 700; }
+  .tbl    { display: grid; grid-template-columns: 7mm 1fr 1fr 1.15fr; column-gap: 1mm; }
+  .tbl > div { text-align: right; }
+  .tbl > div:nth-child(4n+1) { text-align: left; }
+  .tbl .h { font-weight: 700; font-size: .88em; border-bottom: .25mm solid #000; padding-bottom: .6mm; margin-bottom: .6mm; }
+  .tbl .n { font-weight: 700; }
+  .box    { border: .5mm solid #000; padding: 1.2mm 1.6mm; margin: 1mm 0; }
+  .inv    { background: #000; color: #fff; padding: .8mm 1mm; font-weight: 800; }
+  .firma  { margin-top: 9mm; border-top: .25mm solid #000; padding-top: 1mm; }
+  .wrap   { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button type="button" onclick="window.print()">🖨️ Imprimir ticket</button>
+</div>
+
+<div id="ticket"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   ✏️  EDITA SOLO ESTE BLOQUE (misma estructura que la hoja carta)
+   ════════════════════════════════════════════════════════════════ */
+const DATOS = {
+  emisor: {
+    giro: "Mayoreo y Medio Mayoreo Avícola Sanitario y Seleccionado",
+    direccion: "Central de Abastos, Nave 3, Bodega H-42, Iztapalapa, CDMX",
+    telefono: "(55) 5849-2310",
+    celular: "(55) 4120-8899"
+  },
+
+  folio: "REM-2025-0842",
+  fecha: "14 de Mayo, 2025",
+  hora: "07:35 AM",
+  estado: "Entregado / Pendiente Liquidación",
+
+  cliente: {
+    nombre: "Abarrotes y Panadería La Guadalupana",
+    contacto: "Don Roberto Mendoza Silva",
+    domicilio: "Av. Cuauhtémoc #148, Col. Santa Anita",
+    telefono: "(55) 7890-1234"
+  },
+
+  producto: "Huevo blanco de primera",
+  piezasPorCaja: 360,
+  taraPorDefecto: 1.80,
+  cajas: [                     // solo el peso bruto; para otra tara: { bruto: 24.25, tara: 2.00 }
+    { bruto: 24.25 }, { bruto: 24.10 }, { bruto: 24.40 },
+    { bruto: 24.30 }, { bruto: 24.20 }, { bruto: 24.35 }
+  ],
+
+  precioPorKilo: 44.50,
+  redondearAlPeso: true,
+  pagado: 4000.00,
+  metodoPago: "Efectivo / Contraentrega",
+  saldoAnterior: 2450.00,
+
+  // ── Opciones del ticket ──
+  config: {
+    logo: true,                // imprime el logo (1 bit) arriba
+    columnas: 32,              // 32 = Font A en 48 mm · 42 si usas Font B
+    anchoPapel: 48,            // hoja que define tu driver: 48 (recomendado) o 58
+    anchoImprimible: 48,       // zona que realmente imprime tu impresora (mm)
+    firma: true,               // línea de "Recibí de conformidad"
+    pie: ["¡Gracias por su preferencia!", "Calidad y frescura en cada huevo"]
+  }
+};
+/* ════════════════════ FIN DEL BLOQUE EDITABLE ════════════════════ */
+
+
+/* ───────── Lógica (reutilizable en tu app) ───────── */
+const LOGO_B64 = "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";   // PNG 384 px, 1 bit, arte de línea (blanco y negro) para térmica 48 mm
+
+const TicketLili = (function () {
+  const r2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+  const money = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const mxn = n => (n < 0 ? '-' : '') + '$' + money(Math.abs(n));
+  const signo = n => (n >= 0 ? '+' : '-') + '$' + money(Math.abs(n));
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  /* Número → letra (pesos mexicanos) */
+  function aLetras(monto) {
+    const U = ['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
+    const D = ['','','','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+    const C = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+    const m100 = n => n < 30 ? U[n] : D[Math.floor(n / 10)] + (n % 10 ? ' y ' + U[n % 10] : '');
+    const m1000 = n => {
+      if (n === 100) return 'cien';
+      const c = Math.floor(n / 100), res = n % 100;
+      return (C[c] + (c && res ? ' ' : '') + (res ? m100(res) : '')).trim();
+    };
+    const apocope = t => t.replace(/veintiuno$/, 'veintiún').replace(/uno$/, 'un');
+    const entero = n => {
+      if (n === 0) return 'cero';
+      const mill = Math.floor(n / 1e6), mil = Math.floor((n % 1e6) / 1000), res = n % 1000, out = [];
+      if (mill) out.push(mill === 1 ? 'un millón' : apocope(entero(mill)) + ' millones');
+      if (mil) out.push(mil === 1 ? 'mil' : apocope(m1000(mil)) + ' mil');
+      if (res) out.push(m1000(res));
+      return out.join(' ');
+    };
+    const total = r2(monto), ent = Math.floor(total), cts = Math.round((total - ent) * 100);
+    let txt = apocope(entero(ent));
+    if (ent % 1e6 === 0 && ent > 0) txt += ' de';
+    txt = txt.charAt(0).toUpperCase() + txt.slice(1);
+    return txt + ' ' + (ent === 1 ? 'peso' : 'pesos') + ' ' + String(cts).padStart(2, '0') + '/100 M.N.';
+  }
+
+  /* Todos los cálculos en un solo modelo */
+  function calcular(d) {
+    const cajas = d.cajas.map((c, i) => {
+      const tara = c.tara !== undefined ? c.tara : d.taraPorDefecto;
+      return { n: i + 1, bruto: c.bruto, tara, neto: r2(c.bruto - tara) };
+    });
+    const sum = k => r2(cajas.reduce((a, c) => a + c[k], 0));
+    const totNeto = sum('neto');
+    const subtotal = r2(totNeto * d.precioPorKilo);
+    const ajuste = d.redondearAlPeso ? r2(Math.round(subtotal) - subtotal) : 0;
+    const total = r2(subtotal + ajuste);
+    const resta = r2(total - d.pagado);
+    return {
+      cajas, totTara: sum('tara'), totBruto: sum('bruto'), totNeto,
+      piezas: cajas.length * d.piezasPorCaja,
+      subtotal, ajuste, total, resta,
+      saldoTotal: r2(d.saldoAnterior + resta),
+      letra: aLetras(total)
+    };
+  }
+
+  /* ───────── Versión HTML (impresión desde navegador / WebView) ───────── */
+  function renderHTML(d) {
+    const m = calcular(d), cfg = d.config || {};
+    const kg = n => n.toFixed(2);
+    const row = (k, v, cls) => '<div class="row ' + (cls || '') + '"><span>' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>';
+    let h = '<div class="papel">';
+    if (cfg.logo !== false) h += '<img class="logo" alt="H&H Huevos" src="data:image/png;base64,' + LOGO_B64 + '">';
+    h += '<div class="c sm">' + esc(d.emisor.giro) + '</div>';
+    h += '<div class="c sm wrap">' + esc(d.emisor.direccion) + '</div>';
+    h += '<div class="c sm">Tel: ' + esc(d.emisor.telefono) + '</div>';
+    h += '<div class="c sm">WhatsApp: ' + esc(d.emisor.celular) + '</div>';
+    h += '<hr class="sep d">';
+    h += '<div class="c lg">COMPROBANTE DE REMISIÓN</div>';
+    h += '<div class="c xl">' + esc(d.folio) + '</div>';
+    h += row('Fecha:', d.fecha) + row('Hora:', d.hora);
+    h += '<div class="c sm b" style="margin-top:1mm">' + esc(d.estado.toUpperCase()) + '</div>';
+    h += '<hr class="sep">';
+    h += '<div class="b">CLIENTE</div>';
+    h += '<div class="b lg wrap">' + esc(d.cliente.nombre) + '</div>';
+    h += '<div class="sm wrap">Contacto: ' + esc(d.cliente.contacto) + '</div>';
+    h += '<div class="sm wrap">' + esc(d.cliente.domicilio) + '</div>';
+    h += '<div class="sm">Tel: ' + esc(d.cliente.telefono) + '</div>';
+    h += '<hr class="sep">';
+    h += '<div class="sm wrap" style="margin-bottom:1mm">' + esc(d.producto) + ' · ' + d.piezasPorCaja + ' pzas/caja</div>';
+    h += '<div class="tbl"><div class="h">No.</div><div class="h">BRUTO</div><div class="h">TARA</div><div class="h">NETO kg</div>';
+    m.cajas.forEach(c => {
+      h += '<div class="n">' + String(c.n).padStart(2, '0') + '</div><div>' + kg(c.bruto) + '</div><div>' + kg(c.tara) + '</div><div class="b">' + kg(c.neto) + '</div>';
+    });
+    h += '</div>';
+    h += '<hr class="sep">';
+    h += row('Cajas:', String(m.cajas.length));
+    h += row('Piezas:', m.piezas.toLocaleString('en-US'));
+    h += row('Tara total:', kg(m.totTara) + ' kg');
+    h += row('Bruto total:', kg(m.totBruto) + ' kg');
+    h += '<div class="box"><div class="row lg"><span>KILOS NETOS</span><span class="v">' + kg(m.totNeto) + ' kg</span></div></div>';
+    h += row('Precio por kilo:', mxn(d.precioPorKilo));
+    h += row('Subtotal:', mxn(m.subtotal));
+    if (m.ajuste !== 0) h += row('Redondeo:', signo(m.ajuste));
+    h += '<hr class="sep d">';
+    h += '<div class="row xl"><span>TOTAL</span><span class="v">' + mxn(m.total) + '</span></div>';
+    h += '<div class="sm wrap" style="margin-top:1mm"><span class="b">' + esc(m.letra) + '</span></div>';
+    h += '<hr class="sep d">';
+    h += row('Pagado:', mxn(d.pagado));
+    h += '<div class="sm">' + esc(d.metodoPago) + '</div>';
+    h += '<div class="row lg inv" style="margin-top:1.2mm"><span>' + (m.resta <= 0 ? 'LIQUIDADO' : 'RESTA ENTREGA') + '</span><span>' + mxn(Math.max(m.resta, 0)) + '</span></div>';
+    if (m.resta < 0) h += row('Cambio / a favor:', mxn(-m.resta));
+    h += '<hr class="sep">';
+    h += row('Saldo anterior:', mxn(d.saldoAnterior));
+    h += row('Esta remisión:', signo(m.resta));
+    h += '<div class="row lg" style="margin-top:.8mm"><span>SALDO TOTAL</span><span class="v">' + mxn(m.saldoTotal) + '</span></div>';
+    if (cfg.firma !== false) h += '<div class="firma c sm">Recibí de conformidad<br>' + esc(d.cliente.contacto) + '</div>';
+    if (cfg.pie && cfg.pie.length) {
+      h += '<hr class="sep">';
+      cfg.pie.forEach((l, i) => { h += '<div class="c ' + (i === 0 ? 'b' : 'sm') + '">' + esc(l) + '</div>'; });
+    }
+    return h + '</div>';
+  }
+
+  /* ───────── Versión TEXTO PLANO (ESC/POS, Bluetooth, USB, etc.) ─────────
+     opts.sinAcentos = true  → quita acentos (para impresoras sin CP858/UTF-8)
+     Devuelve un string con saltos de línea; cada línea ≤ columnas.        */
+  function renderTexto(d, opts) {
+    opts = opts || {};
+    const m = calcular(d), cfg = d.config || {};
+    const W = cfg.columnas || 32;
+    const out = [];
+    const clean = s => opts.sinAcentos ? String(s).normalize('NFD').replace(/[̀-ͯ]/g, '') : String(s);
+    const wrap = s => {
+      const lines = []; let cur = '';
+      clean(s).split(/\s+/).forEach(w => {
+        while (w.length > W) { if (cur) { lines.push(cur); cur = ''; } lines.push(w.slice(0, W)); w = w.slice(W); }
+        if ((cur + ' ' + w).trim().length > W) { lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim();
+      });
+      if (cur) lines.push(cur);
+      return lines;
+    };
+    const left   = s => wrap(s).forEach(l => out.push(l));
+    const center = s => wrap(s).forEach(l => out.push(' '.repeat(Math.floor((W - l.length) / 2)) + l));
+    const lr = (l, r) => {
+      l = clean(l); r = clean(r);
+      if (l.length + r.length + 1 <= W) out.push(l + ' '.repeat(W - l.length - r.length) + r);
+      else { out.push(l.slice(0, W)); out.push(' '.repeat(Math.max(0, W - r.length)) + r); }
+    };
+    const sep = ch => out.push((ch || '-').repeat(W));
+    const kg = n => n.toFixed(2);
+
+    center(d.emisor.giro);
+    center(d.emisor.direccion);
+    center('Tel: ' + d.emisor.telefono);
+    center('WhatsApp: ' + d.emisor.celular);
+    sep('=');
+    center('COMPROBANTE DE REMISION');
+    center(d.folio);
+    lr('Fecha:', d.fecha);
+    lr('Hora:', d.hora);
+    center(d.estado.toUpperCase());
+    sep();
+    out.push('CLIENTE');
+    left(d.cliente.nombre.toUpperCase());
+    left('Contacto: ' + d.cliente.contacto);
+    left(d.cliente.domicilio);
+    left('Tel: ' + d.cliente.telefono);
+    sep();
+    left(d.producto + ' - ' + d.piezasPorCaja + ' pzas/caja');
+    const col = (a, b, c, e) => a.padEnd(3) + b.padStart(9) + c.padStart(9) + e.padStart(W - 21);
+    out.push(col('No.', 'BRUTO', 'TARA', 'NETO kg'));
+    m.cajas.forEach(c => out.push(col(String(c.n).padStart(2, '0'), kg(c.bruto), kg(c.tara), kg(c.neto))));
+    sep();
+    lr('Cajas:', String(m.cajas.length));
+    lr('Piezas:', m.piezas.toLocaleString('en-US'));
+    lr('Tara total:', kg(m.totTara) + ' kg');
+    lr('Bruto total:', kg(m.totBruto) + ' kg');
+    lr('KILOS NETOS:', kg(m.totNeto) + ' kg');
+    sep();
+    lr('Precio por kilo:', mxn(d.precioPorKilo));
+    lr('Subtotal:', mxn(m.subtotal));
+    if (m.ajuste !== 0) lr('Redondeo:', signo(m.ajuste));
+    sep('=');
+    lr('TOTAL:', mxn(m.total));
+    sep('=');
+    left(m.letra);
+    sep();
+    lr('Pagado:', mxn(d.pagado));
+    left(d.metodoPago);
+    lr(m.resta <= 0 ? 'LIQUIDADO:' : 'RESTA ENTREGA:', mxn(Math.max(m.resta, 0)));
+    if (m.resta < 0) lr('Cambio / a favor:', mxn(-m.resta));
+    sep();
+    lr('Saldo anterior:', mxn(d.saldoAnterior));
+    lr('Esta remision:', signo(m.resta));
+    lr('SALDO TOTAL:', mxn(m.saldoTotal));
+    if (cfg.firma !== false) { out.push(''); out.push(''); out.push(''); sep(); center('Recibi de conformidad'); center(d.cliente.contacto); }
+    if (cfg.pie && cfg.pie.length) { sep(); cfg.pie.forEach(center); }
+    return out.join('\n') + '\n';
+  }
+
+  return { calcular, renderHTML, renderTexto, aLetras };
+})();
+
+/* Navegador: pinta el ticket en #ticket. Node/app: se exporta el módulo. */
+if (typeof document !== 'undefined' && document.getElementById('ticket')) {
+  const cfgp = DATOS.config || {};
+  document.documentElement.style.setProperty('--papel', (cfgp.anchoPapel || 48) + 'mm');
+  document.documentElement.style.setProperty('--imprimible', (cfgp.anchoImprimible || 48) + 'mm');
+  document.getElementById('ticket').innerHTML = TicketLili.renderHTML(DATOS);
+  document.title = 'Ticket ' + DATOS.folio;
+  window.TicketLili = TicketLili;
+
+  /* Chromium no entiende "@page { size: 48mm auto }", así que se mide el alto
+     real del ticket y se fija una hoja de ancho × alto exacto (sin hojas en blanco). */
+  const ajustarPagina = function () {
+    const papel = document.querySelector('.papel');
+    if (!papel) return;
+    const z = papel.style.zoom;
+    papel.style.zoom = '1';
+    const mm = Math.ceil(papel.getBoundingClientRect().height * 25.4 / 96) + 1;
+    papel.style.zoom = z;
+    let st = document.getElementById('pagina-ticket');
+    if (!st) { st = document.createElement('style'); st.id = 'pagina-ticket'; document.head.appendChild(st); }
+    st.textContent = '@page { size: ' + (cfgp.anchoPapel || 48) + 'mm ' + mm + 'mm; margin: 0; }';
+  };
+  ajustarPagina();
+  window.addEventListener('beforeprint', ajustarPagina);
+  window.TicketLili.ajustarPagina = ajustarPagina;
+}
+if (typeof module !== 'undefined') module.exports = { TicketLili, DATOS };
+</script>
+</body>
+</html>

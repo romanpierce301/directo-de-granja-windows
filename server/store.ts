@@ -298,7 +298,9 @@ export class LedgerStore {
         active INTEGER NOT NULL,
         created_by_user_id TEXT NOT NULL,
         merged_into_customer_id TEXT,
-        created_at_utc TEXT NOT NULL
+        created_at_utc TEXT NOT NULL,
+        special_price_centavos_per_kg INTEGER,
+        credit_term_days INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_customers_business_name ON customers(business_name);
 
@@ -511,10 +513,12 @@ export class LedgerStore {
       'product_type',
       "TEXT NOT NULL DEFAULT 'huevo'"
     );
+    this.ensureColumnExists('customers', 'special_price_centavos_per_kg', 'INTEGER');
+    this.ensureColumnExists('customers', 'credit_term_days', 'INTEGER');
   }
 
   private ensureColumnExists(table: string, column: string, definition: string): void {
-    const allowedTables = new Set(['deliveries', 'warehouse_shipment_lines']);
+    const allowedTables = new Set(['deliveries', 'warehouse_shipment_lines', 'customers']);
     if (!allowedTables.has(table)) return;
     const cols = this.sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!cols.some((c) => c.name === column)) {
@@ -579,6 +583,8 @@ export class LedgerStore {
         createdByUserId: r.created_by_user_id,
         mergedIntoCustomerId: r.merged_into_customer_id ?? null,
         createdAtUtc: r.created_at_utc,
+        specialPriceCentavosPerKg: r.special_price_centavos_per_kg ?? null,
+        creditTermDays: r.credit_term_days ?? null,
       })
     ) as Customer[];
 
@@ -897,8 +903,8 @@ export class LedgerStore {
       );
 
       const insCust = this.sqlite.prepare(`
-        INSERT INTO customers (id, sort_order, business_name, contact_name, phone, address, notes, active, created_by_user_id, merged_into_customer_id, created_at_utc)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO customers (id, sort_order, business_name, contact_name, phone, address, notes, active, created_by_user_id, merged_into_customer_id, created_at_utc, special_price_centavos_per_kg, credit_term_days)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       data.customers.forEach((c, i) =>
         insCust.run(
@@ -912,7 +918,9 @@ export class LedgerStore {
           c.active ? 1 : 0,
           c.createdByUserId,
           c.mergedIntoCustomerId ?? null,
-          c.createdAtUtc
+          c.createdAtUtc,
+          c.specialPriceCentavosPerKg ?? null,
+          c.creditTermDays ?? null
         )
       );
 

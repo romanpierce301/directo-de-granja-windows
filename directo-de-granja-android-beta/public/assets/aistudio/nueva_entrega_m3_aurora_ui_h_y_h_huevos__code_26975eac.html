@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_stack" name="shell-type"/>
+<title>Nueva Entrega - H y H HUEVOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#0a141e",
+            "surface-dim": "#070e16",
+            "surface-container-lowest": "#050f19",
+            "surface-container-low": "#101b26",
+            "surface-container": "#152330",
+            "surface-container-high": "#1e2e3d",
+            "surface-container-highest": "#283b4d",
+            "on-surface": "#e1eaf5",
+            "on-surface-variant": "#a7b8c7",
+            "outline": "#4e6375",
+            "outline-variant": "#2b3b4a",
+            "primary": "#91d5af",
+            "primary-container": "#184f37",
+            "on-primary": "#003823",
+            "on-primary-container": "#acf2ca",
+            "secondary": "#ecc068",
+            "secondary-container": "#553f00",
+            "on-secondary": "#402d00",
+            "on-secondary-container": "#ffdea2",
+            "tertiary": "#9ad3b3",
+            "error": "#ffb4ab",
+            "error-container": "#93000a",
+            "aurora-green": "#34d399",
+            "aurora-gold": "#fbbf24",
+            "aurora-teal": "#2dd4bf"
+          },
+          borderRadius: {
+            "3xl": "1.75rem",
+            "4xl": "2.25rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            sans: ["Roboto Flex", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100vw;
+        margin: 0;
+        padding: 0;
+        background-color: #070e16;
+        color: #e1eaf5;
+        font-family: 'Roboto Flex', sans-serif;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+    
+    /* Aurora UI Fluid Glows */
+    .aurora-glow-subtle {
+      box-shadow: 0 0 45px -8px rgba(52, 211, 153, 0.18), 0 0 24px -6px rgba(251, 191, 36, 0.12);
+    }
+    .aurora-border-glow {
+      position: relative;
+    }
+    .aurora-border-glow::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(145, 213, 175, 0.35) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(236, 192, 104, 0.3) 100%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+    .num-glow-emerald {
+      text-shadow: 0 0 16px rgba(145, 213, 175, 0.45);
+    }
+    .num-glow-amber {
+      text-shadow: 0 0 20px rgba(236, 192, 104, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-surface-dim text-on-surface flex flex-col min-h-screen relative overflow-x-hidden selection:bg-primary/20">
+<!-- Ambient Aurora Blurs Background -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+<div class="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-emerald-500/15 blur-[100px] animate-pulse" style="animation-duration: 7s;"></div>
+<div class="absolute top-[28%] -right-24 w-88 h-88 rounded-full bg-amber-500/12 blur-[110px]"></div>
+<div class="absolute top-[60%] left-[-15%] w-72 h-72 rounded-full bg-teal-500/10 blur-[100px]"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 rounded-full bg-emerald-600/15 blur-[120px]"></div>
+</div>
+<!-- Sticky Material 3 App Header -->
+<header class="sticky top-0 inset-x-0 z-40 bg-surface-dim/80 backdrop-blur-xl border-b border-white/[0.06] pt-safe transition-all">
+<div class="h-16 px-4 flex items-center justify-between gap-3 max-w-md mx-auto">
+<div class="flex items-center gap-3">
+<button aria-label="Volver" class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface hover:bg-white/10 active:scale-95 transition-all" onclick="openCancelModal()" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<img alt="Logotipo H y H HUEVOS" class="h-8 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" src="https://lh3.googleusercontent.com/aida/ALJJyrAwO0GeABWtK_HBYDq1nmxdeBJ_gRQ4SPuiLc0yIFOO5k-QXwSvMgu7qC_qCX-4wa87lnbKqfftEr99_gEKmbYfHcCTP9GpYMYtPHYralyMoo8rVOLYx6Q9YTcluxcCR3-OzRtGH4WCmYvNMMPXJTfyn-KW4GCyTRHDy-olmfFopxmbQzHeSFlgqdMz39TgxPMVM52iI5uZaW534wHUk31zfTbrrwuf7uoxR2BRfY4f"/>
+<div class="flex flex-col">
+<h1 class="text-[17px] font-bold tracking-tight text-white leading-tight">Nueva Entrega</h1>
+<span class="text-[10px] font-bold text-secondary uppercase tracking-widest flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary inline-block"></span> H y H HUEVOS
+          </span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button aria-label="Perfil de operador" class="w-9 h-9 rounded-full bg-surface-container-high/80 border border-white/10 flex items-center justify-center text-primary hover:border-primary/40 active:scale-95 transition-all shadow-inner" type="button">
+<span class="material-symbols-outlined text-[20px]">person</span>
+</button>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col relative w-full z-10 max-w-md mx-auto pb-safe">
+<div class="flex flex-col w-full px-4 pt-3 pb-8 space-y-4">
+<!-- M3 Route Status Pill Strip -->
+<div class="flex items-center justify-between gap-2 px-1">
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] backdrop-blur-md">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="text-[11px] font-bold tracking-wider uppercase text-on-surface-variant">Ruta Matutina Norte</span>
+</div>
+<div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/10 border border-secondary/25 backdrop-blur-md">
+<span class="material-symbols-outlined text-secondary text-[15px]">scale</span>
+<span class="text-[11px] font-semibold text-secondary">Báscula Calibrada</span>
+</div>
+</div>
+<!-- Aurora Frosted Client Card (M3 Tonal Container) -->
+<div class="aurora-border-glow rounded-3xl bg-surface-container/70 backdrop-blur-xl p-4 shadow-xl shadow-black/40 overflow-hidden relative">
+<!-- Inner aurora ambient flare -->
+<div class="absolute -right-12 -top-12 w-36 h-36 bg-secondary/15 rounded-full blur-2xl pointer-events-none"></div>
+<div class="relative z-10 flex items-start justify-between gap-3">
+<div class="min-w-0 flex-1">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-[10px] font-bold tracking-wider uppercase text-secondary bg-secondary/10 px-2 py-0.5 rounded-md border border-secondary/20">
+                Cliente #042
+              </span>
+<span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20" id="badge-client-tier">
+<span class="w-1 h-1 rounded-full bg-primary"></span> Precio Especial
+              </span>
+</div>
+<h2 class="text-xl font-bold text-white mt-1.5 truncate tracking-tight" id="client-name-display">Abarrotes La Guadalupana</h2>
+<p class="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5 truncate" id="client-address-display">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">location_on</span>
+              Calle Morelos #45, Centro
+            </p>
+</div>
+<button class="shrink-0 h-10 px-3.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] active:scale-95 border border-white/10 text-primary text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm" id="btn-change-client" type="button">
+<span class="material-symbols-outlined text-[17px]">swap_horiz</span>
+<span>Cambiar</span>
+</button>
+</div>
+<!-- Integrated Price Bar -->
+<div class="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between">
+<div class="flex items-baseline gap-1.5">
+<span class="text-xs text-on-surface-variant">Tarifa pactada:</span>
+<span class="text-sm font-extrabold text-secondary num-glow-amber tracking-tight" id="price-per-kg-display">$42.50 MXN / kg</span>
+</div>
+<span class="text-[11px] text-on-surface-variant/70 line-through">$44.00 general</span>
+</div>
+</div>
+<!-- M3 Segmented Pill Selector (Weighing Modality) -->
+<div class="space-y-2">
+<div class="flex items-center justify-between px-1">
+<label class="text-[11px] font-bold text-on-surface-variant tracking-wider uppercase flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-primary">tune</span>
+            Modalidad de Pesaje
+          </label>
+<span class="text-[10px] font-semibold text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+            Norma H&amp;H v2.4
+          </span>
+</div>
+<!-- Segmented Container -->
+<div class="p-1 rounded-full bg-surface-container-high/80 backdrop-blur-md border border-white/[0.08] grid grid-cols-3 gap-1 shadow-inner">
+<button class="py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all bg-gradient-to-r from-primary to-emerald-400 text-surface-dim font-bold shadow-md shadow-primary/25 scale-[1.02]" id="tab-caja" onclick="setMode('caja')" type="button">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+<span class="text-xs font-bold leading-none">Caja</span>
+</div>
+<span class="text-[9px] font-medium opacity-85 leading-tight mt-0.5">Completa</span>
+</button>
+<button class="py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all text-on-surface-variant hover:text-white" id="tab-media" onclick="setMode('media')" type="button">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">layers</span>
+<span class="text-xs font-bold leading-none">Media</span>
+</div>
+<span class="text-[9px] font-medium opacity-70 leading-tight mt-0.5">Caja dividida</span>
+</button>
+<button class="py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all text-on-surface-variant hover:text-white" id="tab-pesada" onclick="setMode('pesada')" type="button">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">monitor_weight</span>
+<span class="text-xs font-bold leading-none">Pesada</span>
+</div>
+<span class="text-[9px] font-medium opacity-70 leading-tight mt-0.5">Media 500g</span>
+</button>
+</div>
+<!-- Context explanation banner -->
+<div class="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-2.5 flex items-center gap-2.5 backdrop-blur-sm" id="mode-hint">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0">info</span>
+<p class="text-xs text-on-surface-variant leading-tight" id="mode-description">
+            Tara automática: <strong class="text-white">2.000 kg</strong> por caja. Peso neto = Peso bruto − Tara.
+          </p>
+</div>
+</div>
+<!-- M3 Expressive Live Input & Weight Card -->
+<div class="aurora-border-glow rounded-3xl bg-surface-container/70 backdrop-blur-xl p-4 shadow-xl shadow-black/40 space-y-4">
+<!-- Expressive Inputs Grid -->
+<div class="grid grid-cols-2 gap-3">
+<!-- Bultos / Cajas Input -->
+<div class="space-y-1.5">
+<label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1" for="input-boxes">
+<span class="material-symbols-outlined text-[15px] text-secondary">all_inbox</span>
+              Cajas / Bultos
+            </label>
+<div class="relative h-14 rounded-2xl bg-surface-container-high/90 border border-white/[0.08] focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/20 flex items-center px-3.5 transition-all">
+<input class="w-full bg-transparent text-xl font-extrabold text-white focus:outline-none tracking-tight font-mono" id="input-boxes" inputmode="decimal" min="0.5" oninput="recalculate()" placeholder="0.0" step="0.5" type="number" value="3"/>
+<span class="text-xs font-bold text-on-surface-variant pl-1 shrink-0">cajas</span>
+</div>
+</div>
+<!-- Peso Bruto Input -->
+<div class="space-y-1.5">
+<label class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1" for="input-gross">
+<span class="material-symbols-outlined text-[15px] text-primary">scale</span>
+              Peso Bruto (kg)
+            </label>
+<div class="relative h-14 rounded-2xl bg-surface-container-high/90 border border-white/[0.08] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 flex items-center px-3.5 transition-all">
+<input class="w-full bg-transparent text-xl font-extrabold text-white focus:outline-none tracking-tight font-mono" id="input-gross" inputmode="decimal" min="0" oninput="recalculate()" placeholder="0.000" step="0.005" type="number" value="68.450"/>
+<span class="text-xs font-bold text-on-surface-variant pl-1 shrink-0">kg</span>
+</div>
+</div>
+</div>
+<!-- M3 Tonal Container: Live Tare & Net Readout -->
+<div class="rounded-2xl bg-gradient-to-br from-surface-container-lowest/80 to-surface-container-high/40 border border-white/[0.06] p-3.5 space-y-2.5 relative overflow-hidden">
+<div class="absolute -left-10 -bottom-10 w-28 h-28 bg-primary/10 rounded-full blur-xl pointer-events-none"></div>
+<!-- Tara Line -->
+<div class="flex items-center justify-between relative z-10">
+<span class="text-xs text-on-surface-variant flex items-center gap-1.5 font-medium">
+<span class="material-symbols-outlined text-[16px] text-error">remove_circle_outline</span>
+              Tara calculada de empaque:
+            </span>
+<span class="text-sm font-mono font-bold text-error" id="tara-display">-6.000 kg</span>
+</div>
+<!-- Divider -->
+<div class="h-px w-full bg-white/[0.06]"></div>
+<!-- Big Net Weight Display with Aurora glow -->
+<div class="flex items-baseline justify-between relative z-10 pt-1">
+<div>
+<span class="text-[10px] font-bold uppercase tracking-widest text-primary block">Peso Neto Liquidable</span>
+<p class="text-[11px] text-on-surface-variant/80">Exacto sin truncar decimales</p>
+</div>
+<div class="text-right">
+<span class="text-3xl font-black font-mono tracking-tight text-white num-glow-emerald" id="neto-display">62.450</span>
+<span class="text-base font-bold text-primary ml-1">kg</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Total Liquidación & Rounding Rule Card -->
+<div class="aurora-border-glow aurora-glow-subtle rounded-3xl bg-surface-container/80 backdrop-blur-xl p-4 shadow-2xl shadow-black/50 space-y-3.5 relative overflow-hidden">
+<!-- Floating Aurora Liquid Splashes -->
+<div class="absolute -top-16 -right-16 w-36 h-36 bg-amber-400/20 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-12 -left-12 w-32 h-32 bg-emerald-400/15 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Subtotal Row -->
+<div class="flex items-center justify-between text-xs text-on-surface-variant relative z-10">
+<span class="font-medium">Subtotal exacto (Neto × Tarifa)</span>
+<span class="font-mono font-bold text-on-surface text-sm" id="subtotal-display">$2,654.12 MXN</span>
+</div>
+<!-- Official Rounding Pill Card -->
+<div class="rounded-2xl bg-white/[0.04] border border-secondary/20 p-3 flex items-start gap-2.5 relative z-10">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">currency_exchange</span>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between gap-1 flex-wrap">
+<span class="text-[10px] font-bold tracking-wider uppercase text-secondary">Regla Oficial Redondeo</span>
+<span class="text-[9px] font-bold text-secondary bg-secondary/15 px-2 py-0.5 rounded-full border border-secondary/25">
+                &lt;50¢ baja • ≥50¢ sube
+              </span>
+</div>
+<p class="text-xs text-on-surface-variant mt-1 leading-snug" id="rounding-explanation">
+              Diferencia de ajuste: -$0.12 MXN (fracción a favor del cliente).
+            </p>
+</div>
+</div>
+<!-- Grand Final Amount Display -->
+<div class="pt-2 flex items-baseline justify-between border-t border-white/[0.08] relative z-10">
+<div>
+<span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant block">Total a Cobrar</span>
+<span class="text-xs font-semibold text-primary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span> En efectivo / entrega
+            </span>
+</div>
+<div class="text-right">
+<span class="text-3xl font-black font-mono tracking-tight text-secondary num-glow-amber" id="final-total-display">$2,654.00</span>
+<span class="text-xs font-bold text-on-surface-variant ml-1 font-mono">MXN</span>
+</div>
+</div>
+</div>
+<!-- Action Buttons with 3D Organic Aurora Sheen -->
+<div class="pt-2 space-y-2.5">
+<button class="w-full h-14 rounded-full bg-gradient-to-r from-emerald-400 via-primary to-teal-300 text-surface-dim font-bold text-base tracking-wide flex items-center justify-center gap-2.5 shadow-[0_8px_25px_-4px_rgba(52,211,153,0.5),0_3px_0_0_#1b5e3c] active:shadow-[0_2px_10px_-2px_rgba(52,211,153,0.4)] active:translate-y-0.5 transition-all cursor-pointer" id="btn-submit" onclick="handleAdvancePayment()" type="button">
+<span class="drop-shadow-sm font-extrabold">Continuar a Pago</span>
+<span class="material-symbols-outlined text-[22px] font-bold">arrow_forward</span>
+</button>
+<button class="w-full h-11 rounded-full bg-transparent hover:bg-white/[0.06] active:bg-white/[0.1] text-on-surface-variant hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all" onclick="openCancelModal()" type="button">
+<span class="material-symbols-outlined text-[17px]">cancel</span>
+<span>Cancelar captura</span>
+</button>
+</div>
+</div>
+<!-- Exit Safety Protection Dialog / Modal -->
+<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4" id="safety-modal">
+<div class="aurora-border-glow rounded-3xl bg-surface-container/95 p-6 w-full max-w-sm space-y-4 shadow-2xl relative">
+<div class="w-12 h-12 rounded-full bg-error/15 border border-error/30 flex items-center justify-center mx-auto text-error">
+<span class="material-symbols-outlined text-[26px]">warning</span>
+</div>
+<div class="text-center space-y-1.5">
+<h3 class="text-lg font-bold text-white tracking-tight">¿Deseas salir del pesaje?</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+            Hay datos ingresados para <span class="text-white font-semibold" id="modal-client-preview">Abarrotes La Guadalupana</span>. Puedes conservar el borrador para continuar después.
+          </p>
+</div>
+<div class="space-y-2 pt-2">
+<button class="w-full h-12 rounded-full bg-gradient-to-r from-emerald-400 to-primary text-surface-dim font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/30 active:scale-95 transition-all" onclick="closeSafetyModal()" type="button">
+            Continuar Capturando
+          </button>
+<button class="w-full h-11 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-error font-semibold text-xs flex items-center justify-center gap-1.5 transition-all" onclick="history.back()" type="button">
+<span class="material-symbols-outlined text-[17px]">exit_to_app</span>
+            Descartar y Salir
+          </button>
+</div>
+</div>
+</div>
+<!-- Client Switch Modal Mock -->
+<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4" id="client-modal">
+<div class="aurora-border-glow rounded-3xl bg-surface-container/95 p-5 w-full max-w-sm space-y-3 shadow-2xl">
+<div class="flex items-center justify-between pb-1">
+<h3 class="text-base font-bold text-white flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[20px]">person_search</span>
+            Seleccionar Cliente
+          </h3>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white/10 active:scale-90" onclick="closeClientModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+<!-- Client Option 1 -->
+<div class="p-3 rounded-2xl bg-white/[0.07] border border-primary/40 hover:border-primary cursor-pointer flex items-center justify-between transition-all" onclick="selectClient('Abarrotes La Guadalupana', 42.50, true, 'Calle Morelos #45, Centro', '042')">
+<div>
+<p class="text-sm font-bold text-white">Abarrotes La Guadalupana</p>
+<p class="text-xs text-secondary font-semibold">Tarifa Especial $42.50/kg</p>
+<p class="text-[10px] text-on-surface-variant">Calle Morelos #45, Centro</p>
+</div>
+<span class="material-symbols-outlined text-primary">check_circle</span>
+</div>
+<!-- Client Option 2 -->
+<div class="p-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] cursor-pointer flex items-center justify-between transition-all" onclick="selectClient('Miscelánea San Juan', 44.00, false, 'Av. Juárez #102', '089')">
+<div>
+<p class="text-sm font-bold text-white">Miscelánea San Juan</p>
+<p class="text-xs text-on-surface-variant">Tarifa General $44.00/kg</p>
+<p class="text-[10px] text-on-surface-variant/70">Av. Juárez #102</p>
+</div>
+<span class="material-symbols-outlined text-transparent hover:text-white/40">chevron_right</span>
+</div>
+<!-- Client Option 3 -->
+<div class="p-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] cursor-pointer flex items-center justify-between transition-all" onclick="selectClient('Cremería La Flor', 41.80, true, 'Mercado Central Loc. 12', '115')">
+<div>
+<p class="text-sm font-bold text-white">Cremería La Flor</p>
+<p class="text-xs text-secondary font-semibold">Tarifa Preferencial $41.80/kg</p>
+<p class="text-[10px] text-on-surface-variant/70">Mercado Central Loc. 12</p>
+</div>
+<span class="material-symbols-outlined text-transparent hover:text-white/40">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+    let currentMode = 'caja';
+    let pricePerKg = 42.50;
+
+    function setMode(mode) {
+      currentMode = mode;
+      
+      const tabs = ['caja', 'media', 'pesada'];
+      tabs.forEach(m => {
+        const tabEl = document.getElementById('tab-' + m);
+        if (m === mode) {
+          tabEl.className = 'py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all bg-gradient-to-r from-primary to-emerald-400 text-surface-dim font-bold shadow-md shadow-primary/25 scale-[1.02]';
+        } else {
+          tabEl.className = 'py-2.5 px-2 rounded-full flex flex-col items-center justify-center transition-all text-on-surface-variant hover:text-white';
+        }
+      });
+
+      const hintEl = document.getElementById('mode-description');
+      if (mode === 'caja') {
+        hintEl.innerHTML = 'Tara automática: <strong class="text-white">2.000 kg</strong> por caja. Peso neto = Peso bruto − Tara.';
+      } else if (mode === 'media') {
+        hintEl.innerHTML = 'Tara automática: <strong class="text-white">2.000 kg</strong> base. Peso neto = (Peso bruto − 2.0 kg) ÷ 2.';
+      } else if (mode === 'pesada') {
+        hintEl.innerHTML = 'Media caja pesada: descuento fijo de <strong class="text-white">500 g (−0.500 kg)</strong>. Sin deducción de caja entera.';
+      }
+
+      recalculate();
+    }
+
+    function recalculate() {
+      const boxesInput = parseFloat(document.getElementById('input-boxes').value) || 0;
+      const grossInput = parseFloat(document.getElementById('input-gross').value) || 0;
+
+      let taraKg = 0;
+      let netWeight = 0;
+
+      if (currentMode === 'caja') {
+        taraKg = boxesInput * 2.000;
+        netWeight = Math.max(0, grossInput - taraKg);
+      } else if (currentMode === 'media') {
+        taraKg = 2.000;
+        netWeight = Math.max(0, (grossInput - 2.000) / 2);
+      } else if (currentMode === 'pesada') {
+        taraKg = 0.500;
+        netWeight = Math.max(0, grossInput - 0.500);
+      }
+
+      document.getElementById('tara-display').innerText = `-${taraKg.toFixed(3)} kg`;
+      document.getElementById('neto-display').innerText = netWeight.toFixed(3);
+
+      const exactAmount = netWeight * pricePerKg;
+      document.getElementById('subtotal-display').innerText = `$${exactAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN`;
+
+      // Official H&H Rounding Rule: < 0.50 baja, >= 0.50 sube
+      const integerPart = Math.floor(exactAmount);
+      const decimalPart = exactAmount - integerPart;
+      let finalAmount = integerPart;
+
+      if (decimalPart >= 0.50) {
+        finalAmount = integerPart + 1;
+      }
+
+      const diff = finalAmount - exactAmount;
+      const diffSign = diff >= 0 ? '+' : '-';
+      const explanationEl = document.getElementById('rounding-explanation');
+      explanationEl.innerText = `Ajuste redondeo: ${diffSign}$${Math.abs(diff).toFixed(2)} MXN (${decimalPart >= 0.50 ? 'fracción redondeada arriba' : 'fracción a favor del cliente'}).`;
+
+      document.getElementById('final-total-display').innerText = `$${finalAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function openCancelModal() {
+      const modal = document.getElementById('safety-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSafetyModal() {
+      const modal = document.getElementById('safety-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    document.getElementById('btn-change-client').addEventListener('click', () => {
+      const modal = document.getElementById('client-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    });
+
+    function closeClientModal() {
+      const modal = document.getElementById('client-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function selectClient(name, price, isSpecial, address, code) {
+      pricePerKg = price;
+      document.getElementById('client-name-display').innerText = name;
+      document.getElementById('client-address-display').innerHTML = `<span class="material-symbols-outlined text-[14px] text-on-surface-variant">location_on</span> ${address}`;
+      document.getElementById('price-per-kg-display').innerText = `$${price.toFixed(2)} MXN / kg`;
+      document.getElementById('modal-client-preview').innerText = name;
+
+      const badgeTier = document.getElementById('badge-client-tier');
+      if (isSpecial) {
+        badgeTier.className = "inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20";
+        badgeTier.innerHTML = '<span class="w-1 h-1 rounded-full bg-primary"></span> Precio Especial';
+      } else {
+        badgeTier.className = "inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant bg-white/[0.05] px-2 py-0.5 rounded-md border border-white/10";
+        badgeTier.innerHTML = '<span class="w-1 h-1 rounded-full bg-on-surface-variant"></span> General';
+      }
+
+      closeClientModal();
+      recalculate();
+    }
+
+    function handleAdvancePayment() {
+      const total = document.getElementById('final-total-display').innerText;
+      if (navigator.vibrate) navigator.vibrate(40);
+      alert(`Entrega confirmada por ${total}. Avanzando al módulo de Cobro y Recibo Térmico.`);
+    }
+
+    // Initial calculation run
+    recalculate();
+  </script>
+</body></html>

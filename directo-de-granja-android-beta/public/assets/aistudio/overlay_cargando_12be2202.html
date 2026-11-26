@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Cargando</title></head><body><style>body{margin:0}
+.r{position:relative;width:960px;height:600px;overflow:hidden;background:#EEF1F5;font-family:"Segoe UI",Arial,sans-serif}
+.cd{position:absolute;left:330px;top:150px;width:300px;box-sizing:border-box;padding:28px 24px 24px;border-radius:18px;background:#0a141e;border:1px solid #1B2B3C;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 3px 0 #050b11,0 24px 56px rgba(0,0,0,.55);text-align:center}
+h2{margin:14px 0 0;font-size:19px;color:#CFE0FA}
+.bt{font:600 14px "Segoe UI",Arial,sans-serif;padding:11px 22px;margin:18px 5px 0;border-radius:10px;border:1px solid #0F3D7A;border-bottom-width:3px;color:#fff;background:linear-gradient(#3A7BD5,#1E5FBF);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.bt.g{color:#E6EDF5;border-color:#3A4C60;background:linear-gradient(#2B3C4F,#1B2836)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+.egg{transform-origin:60px 140px;animation:wob 1.8s ease-in-out infinite}
+@keyframes wob{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.rise{transform:translateY(70px);animation:rise 3.2s ease-in-out infinite}
+@keyframes rise{0%{transform:translateY(150px)}85%,100%{transform:translateY(26px)}}
+.wave{animation:wv 1.4s linear infinite}
+@keyframes wv{to{transform:translateX(-60px)}}
+.crack{stroke-dasharray:90;stroke-dashoffset:90;animation:cr 3.2s ease-in-out infinite}
+@keyframes cr{0%,30%{stroke-dashoffset:90}85%,100%{stroke-dashoffset:0}}
+.sh{transform-origin:60px 146px;animation:shd 1.8s ease-in-out infinite}
+@keyframes shd{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.82)}}</style>
+<div class="r"><div class="cd">
+<svg width="132" height="170" viewBox="0 0 120 150" role="img" aria-label="Huevo cargando"><defs><clipPath id="e"><path d="M60 6C90 6 112 58 112 92C112 124 90 144 60 144C30 144 8 124 8 92C8 58 30 6 60 6Z"/></clipPath></defs>
+<ellipse class="sh" cx="60" cy="146" rx="34" ry="5" fill="#fff" opacity=".07"/>
+<g class="egg"><path d="M60 6C90 6 112 58 112 92C112 124 90 144 60 144C30 144 8 124 8 92C8 58 30 6 60 6Z" fill="#fff"/>
+<g clip-path="url(#e)"><g class="rise"><path class="wave" d="M-60 0Q-45 -9 -30 0T0 0T30 0T60 0T90 0T120 0T150 0V220H-60Z" fill="#F6C928"/></g></g>
+<path d="M60 6C90 6 112 58 112 92C112 124 90 144 60 144C30 144 8 124 8 92C8 58 30 6 60 6Z" fill="none" stroke="#5B9BEA" stroke-width="4"/>
+<path class="crack" d="M44 50L55 66L45 80L60 96" fill="none" stroke="#0F3D7A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+<h2>aguanta tarnal</h2>
+</div></div>
+</body></html>

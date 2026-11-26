@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">H y H HUEVOS</string>
+    <string name="brand_slogan">LOS MAS FRESCOS DE LA ZONA</string>
+    <string name="credit_commitment_legend">El cliente reconoce y acepta el saldo pendiente de esta entrega, comprometiéndose a liquidarlo en la fecha límite de pago establecida.</string>
+    <string name="exit_delivery_title">¿Estás seguro de que quieres salir?</string>
+    <string name="exit_delivery_confirm">Sí, salir</string>
+    <string name="exit_delivery_cancel">No, continuar</string>
+    <string name="exit_app_title">¿Estás seguro de que quieres salir de la aplicación?</string>
+    <string name="exit_app_stay">Permanecer</string>
+    <string name="exit_app_confirm">Sí, salir</string>
+</resources>

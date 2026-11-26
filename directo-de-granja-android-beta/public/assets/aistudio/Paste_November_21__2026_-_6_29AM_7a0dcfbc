@@ -1,0 +1,983 @@
+1. OBJETIVO GENERAL
+
+Desarrollar una aplicación Android nativa para administrar las operaciones comerciales de H y H HUEVOS.
+
+La aplicación permitirá controlar clientes, entregas, cobros, deudas, compras de huevo, inventario, recordatorios, cierres diarios, tickets, cancelaciones y respaldos.
+
+Debe ser sencilla de utilizar, rápida, confiable y capaz de trabajar sin conexión a Internet.
+
+La aplicación tendrá una identidad comercial y una interfaz completamente nuevas, con una paleta de colores propia y componentes visuales diseñados para esta nueva versión.
+
+1.1. Restricciones fundamentales
+
+- La aplicación funcionará sin conexión a Internet.
+- Toda la información se almacenará localmente en el dispositivo.
+- No utilizar Supabase, Firebase, servidores, bases de datos externas ni sincronización en la nube.
+- No desarrollar una versión web.
+- No agregar módulos, campos, botones ni funcionalidades que no estén especificados o aprobados.
+- No duplicar botones ni accesos a una misma función.
+- Cada función tendrá un único acceso principal, ubicado de forma coherente.
+- No incluir nombres precargados, clientes ficticios ni datos de demostración.
+- No redondear cantidades de cajas ni pesos.
+- La moneda de toda la aplicación será el peso mexicano (MXN).
+- La aplicación tendrá exclusivamente tema oscuro.
+- No implementar perfiles de usuario ni pantallas de inicio de sesión.
+- El acceso a la aplicación será directamente a la pantalla principal.
+
+2. IDENTIDAD VISUAL Y DISEÑO
+
+2.1. Identidad comercial
+
+Nombre oficial:
+
+H y H HUEVOS
+
+Eslogan oficial:
+
+LOS MAS FRESCOS DE LA ZONA
+
+Toda la aplicación deberá utilizar esta identidad.
+
+El nombre comercial deberá aparecer correctamente en las pantallas correspondientes, documentos, tickets y elementos de presentación.
+
+
+
+No implementar tema claro ni selector de temas.
+
+2.3. Tipografía y dimensiones
+
+- Tipografía principal: Roboto.
+- Títulos: 20–24 sp.
+- Subtítulos: 16–18 sp.
+- Texto general: 14–16 sp.
+- Totales importantes: 20–24 sp.
+- Altura recomendada de botones: 48–56 dp.
+
+2.4. Componentes y efectos
+
+Crear componentes visuales propios para esta identidad.
+
+Se pueden utilizar algunos botones con apariencia tridimensional (3D), siempre que el diseño sea discreto y funcional.
+
+No todos los botones deben tener ese efecto.
+
+Evitar animaciones excesivas y elementos decorativos que dificulten el uso.
+
+La  distribución visual debe aplicarse a todas las pantallas, menús, formularios, tickets, diálogos y componentes de la aplicación.
+
+3. ACCESO A LA APLICACIÓN
+
+Se elimina completamente el sistema anterior de perfiles.
+
+3.1. Modificaciones
+
+Eliminar:
+
+- Los tres perfiles de usuario.
+- La selección de perfiles.
+- Los PIN individuales.
+- La configuración de nombres de perfiles.
+- Las pantallas de inicio de sesión.
+- La pantalla de selección de usuario.
+- La identificación del perfil que realizó cada operación.
+
+La aplicación deberá abrir directamente en su pantalla principal.
+
+No solicitar credenciales para ingresar.
+
+No crear perfiles sustitutos ni sistemas de acceso adicionales.
+
+4. NAVEGACIÓN PRINCIPAL
+
+La pantalla principal contará con un menú hamburguesa.
+
+Al abrirlo, mostrará el icono y el nombre de cada módulo.
+
+Al seleccionar un módulo, la aplicación navegará a su pantalla correspondiente.
+
+Regla obligatoria: no crear accesos rápidos adicionales ni repetir botones de acceso a los mismos módulos en otras pantallas.
+
+5. DESCRIPCIÓN DE LAS PANTALLAS
+
+La aplicación conservará los módulos y funciones aprobados, eliminando los apartados expresamente descartados.
+
+PANTALLA 1. Bienvenida
+
+Mostrar la identidad visual de H y H HUEVOS.
+
+Mostrar el eslogan:
+
+LOS MAS FRESCOS DE LA ZONA.
+
+Después de la bienvenida, continuar directamente al panel principal.
+
+No mostrar pantallas de acceso, selección de perfiles ni solicitud de PIN.
+
+PANTALLA 2. Panel principal
+
+- Mostrar el menú hamburguesa.
+- Mostrar la nueva identidad comercial.
+- Presentar el acceso a los módulos mediante el menú.
+- No duplicar accesos ni agregar botones rápidos.
+- Utilizar la nueva paleta de colores y los componentes del nuevo diseño.
+
+PANTALLA 3. Clientes
+
+Permitir:
+
+- Registrar clientes.
+- Editar clientes.
+- Consultar clientes.
+- Eliminar clientes cuando corresponda.
+- Buscar clientes.
+
+Datos del cliente:
+
+- Nombre o nombre del negocio.
+- Teléfono opcional.
+- Dirección.
+
+PANTALLA 4. Perfil del cliente
+
+Mostrar:
+
+- Datos del cliente.
+- Historial de entregas.
+- Deuda de entregas actuales y anteriores.
+- Total acumulado pendiente.
+- Abonos registrados.
+
+Desde esta pantalla se podrá iniciar una nueva entrega para el cliente.
+
+No duplicar funciones que ya tengan un acceso principal en otros módulos.
+
+PANTALLA 5. Nueva entrega
+
+Pantalla para registrar la entrega de huevo.
+
+Debe permitir:
+
+- Seleccionar al cliente.
+- Registrar cajas completas.
+- Registrar medias cajas o fracciones.
+- Registrar el peso bruto cuando corresponda.
+- Aplicar la tara correspondiente.
+- Calcular el peso neto.
+- Aplicar el precio por kilogramo.
+- Calcular el importe de la entrega.
+
+5.1. Modalidades de entrega
+
+Se dispondrá de tres modalidades:
+
+1. Caja completa.
+2. Media caja.
+3. Media caja pesada.
+
+5.2. Caja completa
+
+Cada caja tiene una tara de 2 kg.
+
+Peso neto = peso bruto − 2 kg.
+
+Conservar el funcionamiento y cálculo de la modalidad existente.
+
+5.3. Media caja
+
+Peso neto = (peso bruto − 2 kg) / 2.
+
+Conservar el funcionamiento y cálculo de la modalidad existente.
+
+5.4. Media caja pesada
+
+Nueva modalidad para entregas cuyo peso se captura directamente como peso neto.
+
+Funcionamiento:
+
+1. El usuario seleccionará Media caja pesada.
+2. La aplicación mostrará un campo para introducir el peso neto.
+3. El peso introducido no será bruto.
+4. La aplicación descontará automáticamente 500 gramos (.500 gr).
+5. El resultado se utilizará para calcular el importe correspondiente.
+
+Ejemplo:
+
+Concepto| Peso
+Peso neto ingresado| 15.00 kg
+Descuento automático| 0.50 kg
+Peso final para el cálculo| 14.50 kg
+
+No aplicar nuevamente la tara de 2 kg a esta modalidad.
+
+No aplicar el descuento de 500 gramos a Caja completa ni a Media caja.
+
+No redondear los pesos calculados.
+
+Conservar la precisión de los cálculos durante todo el proceso.
+
+5.5. Inventario fraccionado
+
+El inventario debe aceptar cantidades decimales.
+
+Ejemplo:
+
+- Existencia inicial: 40 cajas.
+- Entregadas: 12.5 cajas.
+- Existencia restante: 27.5 cajas.
+
+No convertir las cantidades fraccionarias en números enteros.
+
+5.6. Navegación Atrás de Android
+
+Si el usuario pulsa el botón o gesto nativo Atrás durante el registro de una entrega, mostrar este diálogo:
+
+¿Estás seguro de que quieres salir?
+
+Opciones:
+
+- Sí, salir.
+- No, continuar.
+
+Si selecciona No, continuar, conservar todos los datos capturados.
+
+Si selecciona Sí, salir, permitir abandonar el registro.
+
+No perder información por una pulsación accidental.
+
+PANTALLA 6. Pago
+
+La pantalla permitirá registrar el pago de la entrega.
+
+Formas de pago
+
+- Contado.
+- Crédito.
+
+No agregar transferencias bancarias en esta versión.
+
+6.1. Pago de contado
+
+El cliente paga el importe completo de la entrega.
+
+- Registrar el pago.
+- Actualizar los saldos.
+- Generar el ticket normal.
+- No solicitar firma digital.
+
+6.2. Pago a crédito
+
+Permitir registrar:
+
+- Un abono inicial.
+- Un pago parcial.
+- El saldo pendiente de la entrega.
+
+Distinguir claramente:
+
+1. Importe de la entrega actual.
+2. Saldo pendiente de la entrega actual.
+3. Deuda anterior del cliente.
+4. Total acumulado pendiente del cliente.
+
+6.3. Firma digital para pagos a crédito
+
+Cuando se confirme una entrega con modalidad de crédito, abrir una pantalla adicional para capturar la firma del cliente.
+
+La pantalla deberá funcionar como una pizarra digital.
+
+Características:
+
+- Mostrar un área de dibujo en blanco.
+- Permitir dibujar utilizando el dedo sobre la pantalla.
+- Permitir borrar la firma.
+- Permitir volver a firmar.
+- Guardar la firma asociada a la entrega correspondiente.
+
+La firma deberá almacenarse localmente y conservarse para su consulta e impresión posterior.
+
+No solicitar firma para operaciones de contado.
+
+6.4. Leyenda de compromiso de pago
+
+Debajo de la firma aparecerá esta leyenda:
+
+"El cliente reconoce y acepta el saldo pendiente de esta entrega, comprometiéndose a liquidarlo en la fecha límite de pago establecida."
+
+La fecha límite de pago queda pendiente de definición.
+
+No implementar un mecanismo de selección de fecha sin autorización.
+
+6.5. Botón de pago deslizable
+
+El pago se confirmará mediante un control deslizante de izquierda a derecha.
+
+Texto orientativo:
+
+«Desliza para pagar».
+
+Al completar el deslizamiento:
+
+- Confirmar la operación.
+- Registrar el pago.
+- Actualizar los saldos.
+- Continuar con el flujo correspondiente al tipo de pago.
+- Generar el ticket.
+- Reproducir el sonido de pago exitoso.
+
+Para crédito, completar también la captura de firma antes de finalizar el proceso.
+
+No colocar un segundo botón convencional para ejecutar la misma acción.
+
+PANTALLA 7. Ticket
+
+Generar un ticket de la entrega.
+
+Existirán dos formatos diferentes según la modalidad de pago.
+
+7.1. Información general del ticket
+
+- Logotipo de H y H HUEVOS.
+- Nombre del cliente.
+- Fecha.
+- Cantidad de cajas.
+- Peso neto.
+- Precio por kilogramo.
+- Importe de la entrega.
+- Forma de pago.
+- Importe recibido o abono.
+- Saldo pendiente de la entrega.
+- Deuda anterior.
+- Deuda total acumulada.
+- Teléfono del negocio.
+- Dirección del negocio.
+- Eslogan: LOS MAS FRESCOS DE LA ZONA.
+
+No incluir información de perfiles de usuario.
+
+El nombre del negocio ya está integrado en el logotipo. No repetirlo como texto independiente.
+
+7.2. Ticket de contado
+
+Cuando la entrega se registre como pagada de contado:
+
+- Generar el ticket normal.
+- No incluir firma.
+- No incluir leyenda de compromiso de pago.
+
+7.3. Ticket de crédito
+
+Cuando la entrega se registre a crédito:
+
+- Generar el ticket especial de crédito.
+- Incluir la firma digital del cliente al final.
+- Mostrar la leyenda de compromiso de pago.
+- Incluir la fecha límite cuando se defina su mecanismo de selección.
+- Mostrar el saldo pendiente.
+
+7.4. Presentación
+
+- El saldo pendiente y la deuda deberán aparecer en negritas.
+- El ticket debe ser claro y fácil de leer.
+- El formato de impresión será para papel térmico de 48 mm de ancho.
+- Ajustar la firma para que sea legible y proporcional al ancho del ticket.
+- Evitar que la firma o la leyenda se corten.
+
+7.5. Opciones independientes del ticket
+
+El ticket tendrá las siguientes acciones:
+
+1. Imprimir.
+2. Compartir PDF por WhatsApp.
+3. Descargar el PDF.
+4. Descargar el archivo de datos correspondiente en formato JSON.
+
+Estas acciones son independientes entre sí.
+
+Compartir o descargar un PDF no debe depender de imprimirlo.
+
+La impresión deberá permitir la conexión con una impresora compatible.
+
+PANTALLA 8. Entregas realizadas
+
+Mostrar el historial de entregas registradas.
+
+Permitir:
+
+- Consultar entregas.
+- Buscar tickets.
+- Abrir el ticket correspondiente.
+- Cancelar una entrega registrada cuando sea necesario.
+
+Cancelación
+
+Al cancelar una entrega:
+
+- Conservar el folio original.
+- No reutilizar folios.
+- Marcar la entrega como cancelada.
+- Revertir su efecto en los saldos correspondientes.
+- Revertir su efecto en las cantidades de inventario correspondientes.
+- Conservar el registro de la operación cancelada para consulta.
+
+No desarrollar un proceso de devolución de efectivo. La aplicación solamente deberá registrar la cancelación y corregir los efectos correspondientes de la operación.
+
+Ticket cancelado
+
+El ticket deberá mostrar claramente:
+
+CANCELADO
+
+Esta palabra aparecerá en negritas y con suficiente destaque visual.
+
+Al completar una cancelación, reproducir un sonido diferente al sonido de pago exitoso.
+
+Al realizar la cancelación, mostrar el overlay de error existente.
+
+PANTALLA 9. Compras de huevo
+
+Permitir registrar las compras de huevo realizadas a proveedores.
+
+Datos:
+
+- Fecha de compra.
+- Cantidad de cajas.
+- Marca.
+- Peso bruto total.
+
+No registrar el costo monetario de la compra ni el dinero pagado al proveedor.
+
+Las compras deberán actualizar el inventario.
+
+PANTALLA 10. Inventario
+
+Mostrar:
+
+- Cantidad de cajas disponibles.
+- Cantidad de cajas entregadas.
+- Cantidad restante.
+- Existencias por marca.
+- Compras registradas.
+
+Actualizar automáticamente las existencias al registrar compras y entregas.
+
+Aceptar fracciones de cajas.
+
+No redondear cantidades.
+
+No incluir alertas de inventario bajo.
+
+No incluir ajustes de producto roto, dañado, faltante o devuelto.
+
+PANTALLA 11. Recordatorios
+
+Permitir registrar recordatorios relacionados con las fechas especiales de entrega de clientes.
+
+Comportamiento:
+
+- Notificación local la noche anterior.
+- Recordatorio al abrir la aplicación el día correspondiente.
+- El recordatorio permanecerá pendiente hasta marcarlo como completado.
+
+Los recordatorios deberán funcionar sin depender de Internet.
+
+Reproducir el sonido de notificación correspondiente.
+
+PANTALLA 12. Cierres diarios
+
+Generar el cierre diario de operaciones.
+
+Incluir:
+
+- Total de entregas.
+- Cantidad de cajas entregadas.
+- Kilogramos entregados.
+- Ventas de contado.
+- Ventas a crédito.
+- Abonos recibidos.
+- Dinero cobrado.
+- Deudas pendientes.
+- Clientes atendidos.
+- Detalle de cada entrega.
+
+Generar los archivos del cierre en PDF y JSON.
+
+Guardar los cierres localmente y permitir consultar cierres anteriores por fecha.
+
+Al completar correctamente el cierre diario, mostrar el overlay de éxito.
+
+PANTALLA 13. Detalle del cierre
+
+Permitir consultar el detalle de un cierre diario.
+
+Mostrar los movimientos que integran los totales y la información de cada entrega.
+
+Permitir acceder a los archivos PDF y JSON correspondientes al cierre.
+
+PANTALLA 14. Respaldos locales
+
+Crear respaldos de la información de la aplicación.
+
+Formato
+
+El formato preferido será JSON.
+
+Se recomienda organizar el respaldo en un paquete ZIP que contenga:
+
+- Datos generales en JSON.
+- Cierres diarios en PDF y JSON.
+- Tickets y registros necesarios.
+- Firmas digitales de los tickets de crédito.
+- Metadatos necesarios para identificar el respaldo.
+
+Permitir guardar los respaldos en el almacenamiento local del teléfono.
+
+Permitir transferirlos a una computadora, por ejemplo, mediante USB.
+
+No implementar sincronización entre dispositivos ni almacenamiento en la nube.
+
+PANTALLA 15. Configuración
+
+Centralizar las configuraciones generales de la aplicación.
+
+Datos del negocio
+
+Permitir editar:
+
+- Teléfono.
+- Dirección.
+- Eslogan.
+
+El nombre comercial será H y H HUEVOS.
+
+El eslogan oficial será LOS MAS FRESCOS DE LA ZONA.
+
+Precio de venta
+
+Permitir establecer el precio global por kilogramo.
+
+Permitir establecer un precio especial por cliente.
+
+Cuando un cliente tenga un precio especial, utilizarlo en lugar del precio global.
+
+Si no tiene precio especial, utilizar el precio global.
+
+Impresora
+
+Incluir la configuración de conexión con impresoras compatibles mediante:
+
+- Bluetooth.
+- USB, considerando la compatibilidad del dispositivo y la conexión OTG cuando corresponda.
+
+La impresión debe admitir tickets de 48 mm de ancho.
+
+La compatibilidad definitiva dependerá del modelo y protocolo de la impresora que se proporcione para las pruebas.
+
+Plantillas visuales
+
+Se recibirán tres plantillas de ventanas de carga/error en un archivo ZIP proporcionado por el usuario.
+
+El desarrollo deberá utilizar esas plantillas exactas.
+
+No crear ventanas sustitutas ni agregar overlays adicionales.
+
+6. REGLAS DE CÁLCULO Y REDONDEO
+
+6.1. Cajas y pesos
+
+No redondear:
+
+- Cajas completas.
+- Medias cajas.
+- Fracciones de cajas.
+- Peso bruto.
+- Tara.
+- Peso neto.
+
+Conservar los valores precisos durante los cálculos.
+
+En Media caja pesada, descontar automáticamente 0.500 kg del peso neto introducido.
+
+6.2. Precio por kilogramo
+
+Calcular el importe utilizando:
+
+Peso final para el cálculo × precio por kilogramo.
+
+En las modalidades normales, el peso final será el peso neto obtenido mediante las reglas de tara.
+
+En Media caja pesada, será el peso neto introducido menos 0.500 kg.
+
+6.3. Regla de redondeo monetario
+
+La aplicación utilizará pesos mexicanos (MXN).
+
+Para el importe final que se cobrará por una entrega, aplicar esta regla:
+
+- Si los centavos son menores de 50, bajar al peso entero anterior.
+- Si son exactamente 50 centavos, conservar los 50 centavos.
+- Si son mayores de 50 centavos, subir al siguiente peso entero.
+
+Ejemplos:
+
+Importe calculado| Importe a cobrar
+$820.20| $820.00
+$820.49| $820.00
+$820.50| $820.50
+$820.51| $821.00
+$820.75| $821.00
+$865.00| $865.00
+
+El redondeo monetario no deberá modificar el peso ni las cantidades de inventario.
+
+Conservar el cálculo original con precisión y mostrar el importe final que corresponde cobrar.
+
+7. SONIDOS DEL SISTEMA
+
+La aplicación tendrá sonidos para tres eventos:
+
+1. Notificación: sonido al presentarse un recordatorio o notificación correspondiente.
+2. Pago exitoso: sonido al completar correctamente el pago de una entrega.
+3. Cancelación: sonido diferente cuando se cancele un ticket, entrega o folio.
+
+Los sonidos deberán corresponder al evento correcto y no confundirse entre sí.
+
+No reproducir el sonido de pago exitoso cuando una operación no se haya confirmado.
+
+8. IMPRESIÓN Y DOCUMENTOS
+
+8.1. Impresión térmica
+
+- Papel de 48 mm de ancho.
+- Conexión Bluetooth.
+- Conexión USB compatible.
+- Formato legible y adaptado al ancho del papel.
+- Compatibilidad con tickets de contado y crédito.
+- Impresión de la firma digital en los tickets de crédito.
+
+8.2. Compartir por WhatsApp
+
+Permitir compartir el PDF del ticket por WhatsApp mediante las opciones nativas de compartir de Android.
+
+La generación del PDF y el envío deben ser independientes de la impresión.
+
+8.3. Descargas
+
+Permitir descargar o guardar:
+
+- Ticket PDF.
+- Datos del ticket en JSON.
+- Cierre diario PDF.
+- Cierre diario JSON.
+- Respaldo general JSON o paquete ZIP.
+
+No depender de una impresora para generar estos documentos.
+
+9. REGLAS DE DEUDAS Y CANCELACIONES
+
+La aplicación deberá mantener separados los importes de cada entrega y la deuda acumulada del cliente.
+
+Al registrar un abono:
+
+- Actualizar el saldo de la entrega correspondiente.
+- Actualizar la deuda acumulada del cliente.
+- Conservar la relación del abono con la operación correspondiente.
+
+Al cancelar una entrega:
+
+- Marcar la operación como cancelada.
+- Corregir los saldos afectados.
+- Corregir el inventario afectado.
+- Mantener el folio original y el historial de cancelación.
+
+No borrar ni reutilizar folios cancelados.
+
+Los pagos realizados directamente en la bodega no se registrarán como operaciones dentro de la aplicación.
+
+10. ALMACENAMIENTO Y SEGURIDAD
+
+Toda la información deberá mantenerse en el dispositivo.
+
+Se deberá implementar almacenamiento local confiable y persistente.
+
+Requisitos:
+
+- Los datos deben conservarse al cerrar la aplicación.
+- Los datos deben conservarse al reiniciar el teléfono.
+- Los registros no deben desaparecer por salir de una pantalla.
+- Las firmas digitales deben conservarse asociadas a sus entregas.
+- Los respaldos deberán permitir recuperar la información respaldada.
+- No implementar servicios externos ni sincronización en la nube.
+
+11. OVERLAYS DEL SISTEMA
+
+Se reutilizarán los tres overlays existentes:
+
+- Overlay de cargando.
+- Overlay de error.
+- Overlay de éxito.
+
+No crear overlays duplicados.
+
+11.1. Overlay de éxito
+
+Mostrar cuando:
+
+- Se registre correctamente una nueva entrega.
+- Se realice correctamente el cierre del día.
+
+Su finalidad será confirmar visualmente que la operación terminó satisfactoriamente.
+
+11.2. Overlay de error
+
+Mostrar cuando:
+
+- Se cancele una nota de entrega.
+
+Su finalidad será mostrar la notificación correspondiente al proceso de cancelación.
+
+11.3. Overlay de cargando
+
+Mostrar cuando:
+
+- El usuario solicite visualizar el ticket de algún cliente.
+- El usuario ingrese a las pantallas del historial de entregas.
+
+Su finalidad será indicar que la aplicación está recuperando o cargando la información solicitada.
+
+Los overlays deben aparecer durante la operación correspondiente y desaparecer al finalizarla.
+
+Utilizar las tres plantillas proporcionadas por el usuario en el archivo ZIP.
+
+12. PROTECCIÓN CONTRA SALIDAS ACCIDENTALES
+
+Se implementarán dos protecciones independientes.
+
+12.1. Durante una nueva entrega
+
+Si el usuario pulsa el botón o gesto nativo Atrás durante el registro de una entrega, mostrar:
+
+¿Estás seguro de que quieres salir?
+
+Opciones:
+
+- Sí, salir.
+- No, continuar.
+
+Si selecciona No, continuar, conservar todos los datos capturados.
+
+Si selecciona Sí, salir, permitir abandonar el registro.
+
+No perder información por una pulsación accidental.
+
+12.2. Salida general de la aplicación
+
+Cuando el usuario pulse dos veces el botón Atrás de Android y la segunda pulsación intente cerrar la aplicación, mostrar:
+
+¿Estás seguro de que quieres salir de la aplicación?
+
+Opciones:
+
+- Permanecer.
+- Sí, salir.
+
+Si selecciona Permanecer, continuar dentro de la aplicación.
+
+Si selecciona Sí, salir, permitir el cierre normal.
+
+Esta protección es independiente de la confirmación que existe dentro del registro de una nueva entrega.
+
+13. REGLAS GENERALES DE INTERFAZ Y FUNCIONAMIENTO
+
+- No duplicar botones.
+- Cada función debe tener un único punto de acceso coherente.
+- Mantener una navegación clara.
+- No agregar funciones no autorizadas.
+- No eliminar funcionalidades que no hayan sido expresamente descartadas.
+- No conservar referencias a Distribuidora de huevo Lili.
+- No conservar el apartado de Cremería del Patrón.
+- No conservar perfiles ni PIN.
+- Mantener los registros y cálculos de las operaciones existentes, salvo los cambios expresamente definidos.
+- Todos los importes estarán expresados en pesos mexicanos.
+- La aplicación funcionará exclusivamente en modo oscuro.
+- Las firmas y tickets de crédito deberán conservar su relación con las entregas originales.
+
+14. PENDIENTES DE DEFINICIÓN
+
+Los siguientes aspectos deberán quedar pendientes hasta recibir instrucciones específicas:
+
+1. Mecanismo para establecer la fecha límite de pago de los créditos.
+2. Cualquier regla comercial adicional que no esté definida en este documento.
+
+No inventar mecanismos ni agregar funcionalidades para resolver estos pendientes.
+
+15. ROADMAP DE DESARROLLO
+
+El desarrollo se realizará por fases, verificando cada etapa antes de avanzar.
+
+FASE 1. Preparación del proyecto
+
+- Crear o adaptar el proyecto Android nativo.
+- Configurar arquitectura y estructura.
+- Implementar la nueva identidad visual.
+- Implementar la nueva paleta de colores.
+- Implementar navegación principal.
+- Preparar almacenamiento local.
+- Eliminar perfiles y pantallas de login.
+- Eliminar el módulo de Cremería del Patrón.
+
+FASE 2. Clientes
+
+- Registro de clientes.
+- Edición y consulta.
+- Perfil individual.
+- Historial de operaciones.
+
+FASE 3. Compras e inventario
+
+- Registro de compras.
+- Actualización de existencias.
+- Control de cajas fraccionadas.
+- Control por marca.
+
+FASE 4. Entregas y cálculos
+
+- Registro de entregas.
+- Caja completa.
+- Media caja.
+- Media caja pesada.
+- Cálculo de tara y peso neto.
+- Precio global y especial.
+- Regla de redondeo monetario.
+- Protección de datos al usar Atrás.
+
+FASE 5. Pagos y deudas
+
+- Pago de contado.
+- Crédito.
+- Captura de firma digital.
+- Abonos.
+- Saldos por entrega.
+- Deuda acumulada.
+- Control de confirmación mediante deslizador.
+
+FASE 6. Tickets, impresión y cancelaciones
+
+- Generación de tickets de contado.
+- Generación de tickets de crédito.
+- Incorporación de firma.
+- Leyenda de compromiso de pago.
+- Diseño para 48 mm.
+- Impresión Bluetooth y USB.
+- Generación de PDF y JSON.
+- Compartir por WhatsApp.
+- Descarga independiente.
+- Cancelación y corrección de saldos e inventario.
+- Sonidos de pago y cancelación.
+
+FASE 7. Módulos complementarios
+
+- Recordatorios.
+- Notificaciones y sonidos.
+
+FASE 8. Cierres y respaldos
+
+- Cierre diario.
+- Consulta histórica.
+- Exportación PDF y JSON.
+- Respaldos locales.
+- Paquetes ZIP.
+- Transferencia mediante USB.
+
+FASE 9. Overlays y navegación
+
+- Integrar overlay de éxito.
+- Integrar overlay de error.
+- Integrar overlay de cargando.
+- Confirmación de salida durante Nueva entrega.
+- Confirmación de salida general de la aplicación.
+
+FASE 10. Pruebas y entrega
+
+- Pruebas funcionales de todas las pantallas.
+- Pruebas de cálculos y redondeos.
+- Pruebas de inventario fraccionado.
+- Pruebas de pagos y cancelaciones.
+- Pruebas de firma digital.
+- Pruebas de persistencia local.
+- Pruebas de impresión.
+- Pruebas de compartir y descargar archivos.
+- Pruebas de sonidos y notificaciones.
+- Pruebas de navegación Atrás.
+- Corrección de errores.
+- Generación del APK final.
+
+16. CRITERIOS OBLIGATORIOS DE ACEPTACIÓN
+
+Antes de considerar terminada la aplicación, verificar:
+
+1. La identidad comercial es H y H HUEVOS.
+2. El eslogan es LOS MAS FRESCOS DE LA ZONA.
+3. No existen referencias a la identidad anterior.
+4. No existe el módulo de Cremería del Patrón.
+5. No existen perfiles de usuario ni PIN.
+6. La aplicación abre directamente en su pantalla principal.
+7. No hay botones duplicados.
+8. La aplicación funciona sin Internet.
+9. Los datos se conservan localmente.
+10. Las cajas y los pesos no se redondean.
+11. Media caja pesada descuenta correctamente 500 gramos.
+12. Los importes se redondean conforme a la regla especificada.
+13. El inventario admite cantidades fraccionarias.
+14. Los precios especiales por cliente funcionan.
+15. Los pagos y abonos actualizan correctamente las deudas.
+16. La cancelación conserva el folio y corrige los saldos.
+17. Los tickets de contado no incluyen firma.
+18. Los tickets de crédito incluyen firma y leyenda.
+19. La firma se conserva asociada a su entrega.
+20. Los tickets se adaptan a papel de 48 mm.
+21. Se puede imprimir por una conexión compatible.
+22. Se puede compartir el PDF por WhatsApp sin imprimir.
+23. Se pueden descargar los documentos.
+24. Los cierres diarios se generan y conservan.
+25. Los respaldos locales funcionan.
+26. Los recordatorios generan sus notificaciones.
+27. Se reproducen los sonidos correspondientes.
+28. El botón o gesto Atrás protege los datos de una entrega en curso.
+29. La salida general de la aplicación solicita confirmación.
+30. Se utilizan las tres plantillas proporcionadas por el usuario.
+31. Los overlays aparecen en las operaciones correctas.
+32. Toda la aplicación utiliza exclusivamente el tema oscuro.
+33. Toda la interfaz utiliza la nueva paleta de colores.
+
+---
+
+17. INSTRUCCIÓN FINAL PARA LA IA DESARROLLADORA
+
+Desarrolla la aplicación Android nativa H y H HUEVOS, con el eslogan LOS MAS FRESCOS DE LA ZONA, siguiendo estrictamente este documento maestro.
+
+Este documento representa los requisitos aprobados por el usuario.
+
+No debes inventar, agregar, eliminar ni modificar funcionalidades por iniciativa propia.
+
+No debes duplicar botones, accesos, pantallas ni acciones.
+
+Cuando exista un comportamiento que no esté definido, solicita una aclaración antes de implementarlo.
+
+No sustituyas funcionalidades solicitadas por alternativas que no hayan sido autorizadas.
+
+Implementa y prueba cada fase antes de avanzar a la siguiente.
+
+Prioriza:
+
+- Exactitud de los cálculos.
+- Integridad de los datos.
+- Facilidad de uso.
+- Funcionamiento sin conexión.
+- Persistencia local.
+- Correcta administración de inventario, entregas y deudas.
+- Compatibilidad de impresión.
+- Generación y distribución de documentos.
+- Conservación de firmas digitales.
+- Correcta aplicación de la nueva identidad comercial.
+
+El resultado debe ser una aplicación funcional, estable y lista para utilizarse en las operaciones reales de H y H HUEVOS.

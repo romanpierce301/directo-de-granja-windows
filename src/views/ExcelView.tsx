@@ -82,9 +82,21 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
       });
       const sheetName = wb.SheetNames[0];
       const sheet = wb.Sheets[sheetName];
-      const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
         raw: false,
         defval: '',
+      });
+      if (rawRows.length > 5000) {
+        onNotify('Archivo rechazado: excede el límite de 5,000 filas por importación.');
+        return;
+      }
+      const jsonRows = rawRows.map((row) => {
+        const clean = Object.create(null) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(row)) {
+          if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+          clean[k] = v;
+        }
+        return clean;
       });
 
       const existingKeys = new Set(

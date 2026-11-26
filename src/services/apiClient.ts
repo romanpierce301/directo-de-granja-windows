@@ -1,5 +1,5 @@
 import type { LedgerDatabase } from '../../server/store.ts';
-import type { ProactiveAlert, UserAccount } from '../../shared/domain.ts';
+import type { HalfBoxWeighType, ProactiveAlert, UserAccount } from '../../shared/domain.ts';
 
 export interface DashboardState extends Omit<LedgerDatabase, 'users'> {
   users: Omit<UserAccount, 'passwordHash'>[];
@@ -108,9 +108,29 @@ export class ApiClient {
     phone: string;
     address: string;
     notes: string;
+    specialPricePesosPerKg?: number | null;
+    creditTermDays?: number | null;
   }) {
     return this.request('/api/customers', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  public async updateCustomer(
+    customerId: string,
+    payload: {
+      businessName?: string;
+      contactName?: string;
+      phone?: string;
+      address?: string;
+      notes?: string;
+      specialPricePesosPerKg?: number | null;
+      creditTermDays?: number | null;
+    }
+  ) {
+    return this.request(`/api/customers/${customerId}`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     });
   }
@@ -209,6 +229,7 @@ export class ApiClient {
           fullBoxes: number;
           halfBoxes: number;
           weighMode: 'total' | 'cajas';
+          halfBoxWeighType?: HalfBoxWeighType;
           totalKg?: number;
           fullBoxesGrossGrams?: number[];
           halfBoxesGrossGrams?: number[];

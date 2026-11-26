@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_stack" name="shell-type"/>
+<title>Pago y Firma Digital - H y H HUEVOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "background": "#0a141e",
+          "surface": "#0a141e",
+          "surface-dim": "#070e16",
+          "surface-container-lowest": "#050f19",
+          "surface-container-low": "#101b26",
+          "surface-container": "#152330",
+          "surface-container-high": "#1e2e3d",
+          "surface-container-highest": "#283b4d",
+          "on-surface": "#e1eaf5",
+          "on-surface-variant": "#a7b8c7",
+          "outline": "#4e6375",
+          "outline-variant": "rgba(255,255,255,0.08)",
+          "primary": "#91d5af",
+          "primary-container": "#184f37",
+          "on-primary": "#003823",
+          "secondary": "#ecc068",
+          "secondary-container": "#553f00",
+          "on-secondary": "#402d00",
+          "aurora-green": "#34d399",
+          "aurora-gold": "#F2C66D",
+          "aurora-teal": "#2dd4bf",
+          "status-success": "#76B995",
+          "error": "#ffb4ab"
+        },
+        borderRadius: {
+          "2xl": "1rem",
+          "3xl": "1.5rem",
+          "4xl": "2rem",
+          "full": "9999px"
+        },
+        fontFamily: {
+          sans: ["Roboto Flex", "sans-serif"]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  @layer base {
+    html, body {
+      width: 100vw;
+      margin: 0;
+      padding: 0;
+      background-color: #0a141e;
+      color: #e1eaf5;
+      font-family: 'Roboto Flex', sans-serif;
+    }
+    body {
+      overscroll-behavior: none;
+    }
+    .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px); }
+    .pt-safe { padding-top: max(env(safe-area-inset-top, 0px), 12px); }
+  }
+  ::-webkit-scrollbar { display: none; }
+
+  /* Aurora UI Subtle Glass & Border Glow */
+  .aurora-border-glow {
+    position: relative;
+  }
+  .aurora-border-glow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(145, 213, 175, 0.35) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(242, 198, 109, 0.3) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .num-glow-amber {
+    text-shadow: 0 0 20px rgba(242, 198, 109, 0.45);
+  }
+  .num-glow-emerald {
+    text-shadow: 0 0 16px rgba(145, 213, 175, 0.4);
+  }
+</style>
+</head>
+<body class="bg-surface text-on-surface flex flex-col min-h-screen relative overflow-x-hidden selection:bg-primary/20">
+<!-- Ambient Aurora UI Fluid Glows Background -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+<div class="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-emerald-500/15 blur-[100px] animate-pulse" style="animation-duration: 7s;"></div>
+<div class="absolute top-[30%] -right-24 w-88 h-88 rounded-full bg-amber-400/12 blur-[110px]"></div>
+<div class="absolute top-[60%] left-[-15%] w-72 h-72 rounded-full bg-teal-500/10 blur-[100px]"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 rounded-full bg-emerald-600/15 blur-[120px]"></div>
+</div>
+<!-- Header Material 3 Translucent Glass -->
+<header class="sticky top-0 inset-x-0 z-40 bg-surface-dim/80 backdrop-blur-xl border-b border-white/[0.06] pt-safe transition-all shadow-md">
+<div class="h-16 px-4 flex items-center justify-between gap-3 max-w-md mx-auto">
+<div class="flex items-center gap-3">
+<button aria-label="Volver" class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface hover:bg-white/10 active:scale-95 transition-all" onclick="history.back()" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<img alt="Logotipo H y H HUEVOS" class="h-8 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" src="https://lh3.googleusercontent.com/aida/ALJJyrAwO0GeABWtK_HBYDq1nmxdeBJ_gRQ4SPuiLc0yIFOO5k-QXwSvMgu7qC_qCX-4wa87lnbKqfftEr99_gEKmbYfHcCTP9GpYMYtPHYralyMoo8rVOLYx6Q9YTcluxcCR3-OzRtGH4WCmYvNMMPXJTfyn-KW4GCyTRHDy-olmfFopxmbQzHeSFlgqdMz39TgxPMVM52iI5uZaW534wHUk31zfTbrrwuf7uoxR2BRfY4f"/>
+<div class="flex flex-col">
+<h1 class="text-[17px] font-bold tracking-tight text-white leading-tight">Pago y Firma</h1>
+<span class="text-[10px] font-bold text-secondary uppercase tracking-widest flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary inline-block"></span> H y H HUEVOS
+        </span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-9 h-9 rounded-full bg-surface-container-high/80 border border-white/10 flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]">person</span>
+</div>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col relative w-full z-10 max-w-md mx-auto pb-safe">
+<div class="flex flex-col w-full px-4 pt-3 pb-8 space-y-4">
+<!-- Resumen de Pedido y Cliente (M3 Frosted Glass Container) -->
+<div class="aurora-border-glow rounded-3xl bg-surface-container/70 backdrop-blur-xl p-4 shadow-xl shadow-black/40 overflow-hidden relative">
+<div class="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-emerald-500/15 blur-2xl pointer-events-none"></div>
+<div class="flex items-center justify-between relative z-10">
+<div class="flex items-center gap-2 min-w-0">
+<div class="w-9 h-9 rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-aurora-gold shrink-0">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">storefront</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-base font-bold text-white tracking-tight truncate">Abarrotes La Guadalupana</span>
+<span class="text-[11px] text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-on-surface-variant">location_on</span> Calle Morelos #45, Centro
+            </span>
+</div>
+</div>
+<span class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-aurora-gold bg-amber-400/10 border border-amber-400/25 px-2.5 py-1 rounded-full backdrop-blur-md">
+          Ruta Norte #14
+        </span>
+</div>
+<div class="grid grid-cols-2 gap-2.5 mt-3.5 relative z-10">
+<div class="bg-surface-container-high/60 border border-white/[0.06] rounded-2xl p-2.5 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">Mercancía</span>
+<span class="text-xs font-bold text-white truncate">3 Cajas Clásicas</span>
+</div>
+</div>
+<div class="bg-surface-container-high/60 border border-white/[0.06] rounded-2xl p-2.5 flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/25 flex items-center justify-center text-aurora-gold shrink-0">
+<span class="material-symbols-outlined text-[18px]">scale</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[10px] uppercase font-semibold text-on-surface-variant tracking-wider">Peso Neto</span>
+<span class="text-xs font-bold text-white font-mono">62.450 <span class="text-[10px] font-normal text-on-surface-variant">kg</span></span>
+</div>
+</div>
+</div>
+</div>
+<!-- M3 Segmented Pill Selector (Modo de Pago) -->
+<div class="p-1 rounded-full bg-surface-container-high/80 backdrop-blur-md border border-white/[0.08] grid grid-cols-2 gap-1 shadow-inner">
+<button class="py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-xs font-semibold text-on-surface-variant hover:text-white transition-all" id="btn-contado" onclick="setPaymentMode('contado')" type="button">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+<span>Contado</span>
+</button>
+<button class="py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-xs font-bold bg-gradient-to-r from-primary to-emerald-400 text-surface-dim shadow-md shadow-primary/25 scale-[1.02] transition-all" id="btn-credito" onclick="setPaymentMode('credito')" type="button">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">calendar_clock</span>
+<span>Crédito Autorizado</span>
+</button>
+</div>
+<!-- Desglose Financiero (M3 Aurora Card) -->
+<div class="aurora-border-glow rounded-3xl bg-surface-container/70 backdrop-blur-xl p-4 shadow-xl shadow-black/40 space-y-3.5 relative overflow-hidden">
+<div class="absolute -top-12 -left-12 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="flex items-center justify-between pb-1 border-b border-white/[0.06] relative z-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">account_balance_wallet</span>
+<span class="text-sm font-bold text-white tracking-wide">Liquidación &amp; Crédito</span>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant bg-white/[0.05] px-2 py-0.5 rounded-full border border-white/10 uppercase tracking-widest">MXN</span>
+</div>
+<!-- Filas de Valores -->
+<div class="flex flex-col gap-2.5 relative z-10">
+<div class="flex justify-between items-center text-xs py-0.5">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-success"></span>
+            Importe entrega actual
+          </span>
+<span class="text-white font-mono font-bold text-sm" id="val-entrega">$2,654.00</span>
+</div>
+<!-- Abono Inicial Editable -->
+<div class="rounded-2xl bg-surface-container-high/70 border border-white/[0.08] p-3 flex items-center justify-between gap-3">
+<div class="flex flex-col min-w-0">
+<label class="text-[11px] font-bold text-aurora-gold flex items-center gap-1.5" for="input-abono">
+<span class="material-symbols-outlined text-[16px]">paid</span>
+              Abono recibido hoy
+            </label>
+<span class="text-[10px] text-on-surface-variant mt-0.5">Efectivo o Transferencia</span>
+</div>
+<div class="flex items-center bg-surface-dim/90 px-3 py-1.5 rounded-xl border border-white/10 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/25 transition-all">
+<span class="text-base font-bold text-white mr-1">$</span>
+<input class="w-24 bg-transparent text-right font-mono font-extrabold text-base text-aurora-gold focus:outline-none" id="input-abono" step="50" type="number" value="1000.00"/>
+</div>
+</div>
+<div class="flex justify-between items-center text-xs py-0.5">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-slate-500"></span>
+            Saldo nuevo por entrega
+          </span>
+<span class="text-white font-mono font-bold text-sm" id="val-saldo-nuevo">$1,654.00</span>
+</div>
+<div class="flex justify-between items-center text-xs py-0.5">
+<span class="text-on-surface-variant flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+            Saldo previo sin liquidar
+          </span>
+<span class="text-secondary font-mono font-bold text-sm" id="val-saldo-previo">$3,200.00</span>
+</div>
+</div>
+<!-- Gran Total Acumulado Pendiente -->
+<div class="rounded-2xl bg-gradient-to-br from-surface-dim to-surface-container-low/95 border border-amber-400/25 p-4 flex items-center justify-between relative overflow-hidden shadow-lg">
+<div class="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-400/15 rounded-full blur-xl pointer-events-none"></div>
+<div class="flex flex-col relative z-10">
+<span class="text-[10.5px] font-bold text-aurora-gold tracking-widest uppercase">Total Acumulado Pendiente</span>
+<span class="text-[11px] text-on-surface-variant mt-0.5">Firma de pagaré comercial</span>
+</div>
+<div class="flex flex-col items-end relative z-10">
+<span class="text-2xl font-black font-mono tracking-tight text-secondary num-glow-amber" id="val-total-acumulado">$4,854.00</span>
+<span class="text-[10px] font-bold text-on-surface-variant tracking-wider">MXN</span>
+</div>
+</div>
+</div>
+<!-- Pizarra Digital de Firma del Cliente (Material 3 Surface Refinada) -->
+<div class="aurora-border-glow rounded-3xl bg-surface-container/70 backdrop-blur-xl p-4 shadow-xl shadow-black/40 space-y-3 relative overflow-hidden">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-2xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[19px]">draw</span>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-white">Firma del Titular / Receptor</span>
+<span class="text-[10px] text-aurora-gold font-semibold">Obligatoria para validación de saldo</span>
+</div>
+</div>
+<button class="px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 active:scale-95 text-on-surface-variant hover:text-white flex items-center gap-1.5 text-xs font-semibold transition-all shadow-sm" id="btn-clear-sign" type="button">
+<span class="material-symbols-outlined text-[15px]">refresh</span>
+<span>Limpiar firma</span>
+</button>
+</div>
+<!-- Canvas Touchscreen Area -->
+<div class="relative w-full h-44 rounded-2xl bg-surface-dim/90 border border-white/[0.08] overflow-hidden flex items-center justify-center touch-none select-none shadow-inner">
+<!-- Watermark decorativa de confianza H y H -->
+<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-25" id="sign-watermark">
+<span class="material-symbols-outlined text-[40px] text-on-surface-variant">history_edu</span>
+<span class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase mt-1">Traza tu firma aquí</span>
+</div>
+<!-- Línea base de firma -->
+<div class="absolute bottom-6 inset-x-8 h-px bg-white/[0.1] pointer-events-none"></div>
+<canvas class="w-full h-full relative z-10 cursor-crosshair" id="canvas-signature"></canvas>
+<!-- Badge confirmador de trazo activo -->
+<div class="absolute top-2.5 right-2.5 bg-status-success/20 border border-status-success/30 text-emerald-300 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 opacity-0 transition-opacity backdrop-blur-md shadow-sm" id="sign-badge">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+          Firma registrada
+        </div>
+</div>
+<!-- Leyenda Legal Obligatoria Exacta Verbatim -->
+<p class="text-[11px] text-on-surface-variant/90 italic leading-relaxed text-center px-1">
+        “El cliente reconoce y acepta el saldo pendiente de esta entrega, comprometiéndose a liquidarlo en la fecha límite de pago establecida.”
+      </p>
+</div>
+<!-- Control de Deslizamiento Slide-To-Pay (Aurora UI) -->
+<div class="pt-1 flex flex-col gap-2">
+<div class="relative w-full h-15 bg-surface-container-high/90 rounded-2xl border border-white/[0.08] overflow-hidden flex items-center px-1.5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] select-none touch-none" id="slide-track" style="height: 58px;">
+<!-- Fondo de progreso verde interactivo -->
+<div class="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-emerald-500/20 via-primary/30 to-emerald-400/40 rounded-l-2xl w-0 transition-[width] duration-75" id="slide-fill"></div>
+<!-- Texto central guía -->
+<div class="w-full flex items-center justify-center pointer-events-none relative z-0">
+<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-2" id="slide-label">
+            Desliza para pagar
+            <span class="material-symbols-outlined text-[18px] animate-pulse text-aurora-gold">chevron_right</span>
+</span>
+</div>
+<!-- Botón Píldora Deslizador Luminoso Aurora UI -->
+<div class="absolute left-1.5 top-1.5 bottom-1.5 w-13 bg-gradient-to-r from-emerald-400 to-primary text-surface-dim rounded-xl flex items-center justify-center shadow-[0_4px_16px_rgba(52,211,153,0.45)] cursor-grab active:cursor-grabbing active:scale-95 transition-transform z-10" id="slide-thumb" style="width: 48px;">
+<span class="material-symbols-outlined text-[24px] font-black" id="slide-thumb-icon">double_arrow</span>
+</div>
+</div>
+<div class="flex items-center justify-center gap-1.5 text-[11px] text-on-surface-variant font-medium text-center">
+<span class="material-symbols-outlined text-[15px] text-aurora-gold">verified</span>
+<span>Transacción protegida y timbrada para ruta H y H</span>
+</div>
+</div>
+</div>
+<!-- Modal BottomSheet de Éxito / Impresión Ticket -->
+<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end p-4 hidden opacity-0 transition-opacity duration-200" id="success-modal">
+<div class="aurora-border-glow rounded-3xl bg-surface-container/95 backdrop-blur-2xl p-6 flex flex-col items-center text-center gap-4 shadow-2xl max-w-md mx-auto w-full">
+<div class="w-16 h-16 rounded-full bg-status-success/20 border border-status-success/40 flex items-center justify-center text-status-success shadow-[0_0_20px_rgba(118,185,149,0.35)]">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex flex-col gap-1">
+<h2 class="text-xl font-bold text-white tracking-tight">¡Pago y Firma Confirmados!</h2>
+<p class="text-xs text-on-surface-variant">Ticket comercial registrado con éxito en Abarrotes La Guadalupana.</p>
+</div>
+<!-- Mini Ticket Preview -->
+<div class="w-full bg-white text-slate-900 p-3.5 rounded-2xl font-mono text-[11px] flex flex-col gap-1 text-left shadow-lg border border-slate-200">
+<div class="text-center font-extrabold text-xs">H y H HUEVOS</div>
+<div class="text-center text-[10px] text-slate-500 mb-1">LOS MAS FRESCOS DE LA ZONA</div>
+<div class="border-b border-dashed border-slate-400 pb-1 flex justify-between font-semibold">
+<span>ENTREGA #9042</span>
+<span>FECHA: HOY</span>
+</div>
+<div class="flex justify-between mt-1">
+<span>3 CAJAS (62.450 KG)</span>
+<span class="font-bold">$2,654.00</span>
+</div>
+<div class="flex justify-between text-slate-600">
+<span>ABONO RECIBIDO</span>
+<span class="font-bold" id="ticket-abono">-$1,000.00</span>
+</div>
+<div class="flex justify-between font-extrabold border-t border-dashed border-slate-400 pt-1 text-xs">
+<span>SALDO TOTAL VIGENTE</span>
+<span id="ticket-total">$4,854.00</span>
+</div>
+</div>
+<button class="w-full h-13 rounded-full bg-gradient-to-r from-emerald-400 via-primary to-teal-300 text-surface-dim font-bold text-sm tracking-wide shadow-[0_8px_25px_-4px_rgba(52,211,153,0.5)] active:translate-y-0.5 flex items-center justify-center gap-2 transition-all cursor-pointer" onclick="window.location.reload()" style="height: 50px;" type="button">
+<span class="material-symbols-outlined text-[20px] font-bold">print</span>
+<span>Imprimir Ticket Térmico 48mm</span>
+</button>
+</div>
+</div>
+</main>
+<script>
+  (function initPaymentScreen() {
+    // Calculadora reactiva
+    const inputAbono = document.getElementById('input-abono');
+    const valEntrega = 2654.00;
+    const valDeudaPrevia = 3200.00;
+    const elSaldoNuevo = document.getElementById('val-saldo-nuevo');
+    const elTotalAcumulado = document.getElementById('val-total-acumulado');
+    const ticketAbono = document.getElementById('ticket-abono');
+    const ticketTotal = document.getElementById('ticket-total');
+
+    function recalcularValores() {
+      let abono = parseFloat(inputAbono.value) || 0;
+      if (abono < 0) abono = 0;
+      if (abono > valEntrega) abono = valEntrega;
+      
+      const saldoNuevo = valEntrega - abono;
+      const totalAcumulado = saldoNuevo + valDeudaPrevia;
+
+      elSaldoNuevo.textContent = `$${saldoNuevo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      elTotalAcumulado.textContent = `$${totalAcumulado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      ticketAbono.textContent = `-$${abono.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      ticketTotal.textContent = `$${totalAcumulado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    inputAbono.addEventListener('input', recalcularValores);
+
+    // Canvas de Firma Digital
+    const canvas = document.getElementById('canvas-signature');
+    const ctx = canvas.getContext('2d');
+    const clearBtn = document.getElementById('btn-clear-sign');
+    const watermark = document.getElementById('sign-watermark');
+    const signBadge = document.getElementById('sign-badge');
+    let isDrawing = false;
+    let hasSigned = false;
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#F2C66D'; // Tono ámbar aurora H y H
+    }
+    
+    setTimeout(resizeCanvas, 60);
+    window.addEventListener('resize', resizeCanvas);
+
+    function startSign(e) {
+      isDrawing = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      watermark.style.opacity = '0';
+    }
+
+    function drawSign(e) {
+      if (!isDrawing) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      if (!hasSigned) {
+        hasSigned = true;
+        signBadge.style.opacity = '1';
+      }
+    }
+
+    function stopSign() {
+      isDrawing = false;
+    }
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener('mousedown', startSign);
+    canvas.addEventListener('mousemove', drawSign);
+    window.addEventListener('mouseup', stopSign);
+
+    canvas.addEventListener('touchstart', startSign, { passive: true });
+    canvas.addEventListener('touchmove', drawSign, { passive: true });
+    window.addEventListener('touchend', stopSign);
+
+    clearBtn.addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hasSigned = false;
+      signBadge.style.opacity = '0';
+      watermark.style.opacity = '0.25';
+    });
+
+    // Segmented Buttons Toggle
+    window.setPaymentMode = function(mode) {
+      const btnContado = document.getElementById('btn-contado');
+      const btnCredito = document.getElementById('btn-credito');
+      const activeClass = "py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-xs font-bold bg-gradient-to-r from-primary to-emerald-400 text-surface-dim shadow-md shadow-primary/25 scale-[1.02] transition-all";
+      const inactiveClass = "py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-xs font-semibold text-on-surface-variant hover:text-white transition-all";
+
+      if (mode === 'contado') {
+        btnContado.className = activeClass;
+        btnCredito.className = inactiveClass;
+        inputAbono.value = valEntrega.toFixed(2);
+      } else {
+        btnCredito.className = activeClass;
+        btnContado.className = inactiveClass;
+        inputAbono.value = "1000.00";
+      }
+      recalcularValores();
+    };
+
+    // Slider interactivo "Desliza para pagar"
+    const track = document.getElementById('slide-track');
+    const thumb = document.getElementById('slide-thumb');
+    const fill = document.getElementById('slide-fill');
+    const thumbIcon = document.getElementById('slide-thumb-icon');
+    const label = document.getElementById('slide-label');
+    const modal = document.getElementById('success-modal');
+
+    let isDragging = false;
+    let startX = 0;
+    let maxDist = 0;
+
+    function getTrackMetrics() {
+      const trackRect = track.getBoundingClientRect();
+      const thumbRect = thumb.getBoundingClientRect();
+      maxDist = trackRect.width - thumbRect.width - 12;
+    }
+
+    function onPointerDown(e) {
+      getTrackMetrics();
+      isDragging = true;
+      startX = e.touches ? e.touches[0].clientX : e.clientX;
+      thumb.style.transition = 'none';
+      fill.style.transition = 'none';
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+      let delta = currentX - startX;
+      if (delta < 0) delta = 0;
+      if (delta > maxDist) delta = maxDist;
+
+      thumb.style.transform = `translateX(${delta}px)`;
+      fill.style.width = `${delta + 28}px`;
+
+      if (delta >= maxDist * 0.94) {
+        completeSlide();
+      }
+    }
+
+    function onPointerUp() {
+      if (!isDragging) return;
+      isDragging = false;
+      thumb.style.transition = 'transform 0.25s ease';
+      fill.style.transition = 'width 0.25s ease';
+      thumb.style.transform = 'translateX(0px)';
+      fill.style.width = '0px';
+    }
+
+    function completeSlide() {
+      isDragging = false;
+      thumb.style.transform = `translateX(${maxDist}px)`;
+      fill.style.width = '100%';
+      thumbIcon.textContent = 'check';
+      label.textContent = '¡Pago Procesado!';
+      label.className = 'text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2';
+
+      if (navigator.vibrate) {
+        navigator.vibrate([40, 60, 40]);
+      }
+
+      setTimeout(() => {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.add('opacity-100'), 20);
+      }, 300);
+    }
+
+    thumb.addEventListener('mousedown', onPointerDown);
+    thumb.addEventListener('touchstart', onPointerDown, { passive: true });
+
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+
+    window.addEventListener('mouseup', onPointerUp);
+    window.addEventListener('touchend', onPointerUp);
+  })();
+</script>
+</body></html>

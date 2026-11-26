@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-container-lowest":"#050f19","secondary":"#ecc068","on-background":"#d9e3f2","surface-container-high":"#212b35","secondary-fixed":"#ffdea2","secondary-container":"#745400","on-primary-fixed":"#002113","tertiary-container":"#7fb798","on-secondary-fixed":"#261900","surface-container-low":"#121c26","inverse-on-surface":"#27313c","secondary-fixed-dim":"#ecc068","on-surface":"#d9e3f2","on-error-container":"#ffdad6","inverse-surface":"#d9e3f2","on-primary":"#003823","surface-container-highest":"#2c3640","on-tertiary-container":"#0d4931","inverse-primary":"#266a4b","primary-fixed-dim":"#91d5af","background":"#0a141e","on-tertiary":"#003823","surface":"#0a141e","error":"#ffb4ab","tertiary-fixed":"#b5f0ce","on-secondary-fixed-variant":"#5c4200","on-tertiary-fixed":"#002113","primary-fixed":"#acf2ca","on-surface-variant":"#bfc9c1","on-primary-fixed-variant":"#025235","surface-bright":"#303a45","surface-tint":"#91d5af","outline":"#89938b","on-tertiary-fixed-variant":"#175038","on-error":"#690005","surface-container":"#17202b","tertiary-fixed-dim":"#9ad3b3","error-container":"#93000a","primary":"#91d5af","surface-dim":"#0a141e","outline-variant":"#404943","on-secondary-container":"#f7cb71","on-secondary":"#402d00","tertiary":"#9ad3b3","surface-variant":"#2c3640","on-primary-container":"#00492f","primary-container":"#76b995"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"space-lg":"1.5rem","space-sm":"0.5rem",margin:"2rem","space-xl":"2rem",gutter:"1.5rem","space-md":"1rem","gutter-mobile":"1rem","space-xs":"0.25rem","margin-mobile":"1rem"},fontFamily:{"label-md":["Roboto Flex"],"headline-sm":["Roboto Flex"],"display-lg":["Roboto Flex"],"body-lg":["Roboto Flex"],"body-md":["Roboto Flex"],"title-sm":["Roboto Flex"],"headline-lg":["Roboto Flex"],"headline-lg-mobile":["Roboto Flex"],"label-lg":["Roboto Flex"],"body-sm":["Roboto Flex"],"title-md":["Roboto Flex"],"label-sm":["Roboto Flex"],"headline-md":["Roboto Flex"],"title-lg":["Roboto Flex"]},fontSize:{"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.5px",fontWeight:"600"}],"headline-sm":["24px",{lineHeight:"32px",letterSpacing:"0px",fontWeight:"500"}],"display-lg":["57px",{lineHeight:"64px",letterSpacing:"-0.25px",fontWeight:"700"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"0.5px",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0.25px",fontWeight:"400"}],"title-sm":["14px",{lineHeight:"20px",letterSpacing:"0.1px",fontWeight:"500"}],"headline-lg":["32px",{lineHeight:"40px",letterSpacing:"0px",fontWeight:"600"}],"headline-lg-mobile":["26px",{lineHeight:"32px",letterSpacing:"0px",fontWeight:"600"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.1px",fontWeight:"600"}],"body-sm":["12px",{lineHeight:"16px",letterSpacing:"0.4px",fontWeight:"400"}],"title-md":["16px",{lineHeight:"24px",letterSpacing:"0.15px",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"16px",letterSpacing:"0.5px",fontWeight:"500"}],"headline-md":["28px",{lineHeight:"36px",letterSpacing:"0px",fontWeight:"500"}],"title-lg":["20px",{lineHeight:"26px",letterSpacing:"0.15px",fontWeight:"600"}]}}}};</script></head><body class="bg-surface text-on-surface font-body-md text-body-md min-h-screen relative selection:bg-primary-container selection:text-on-primary-container"><div class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div class="absolute -top-16 -left-12 w-72 h-72 rounded-full bg-primary-container/10 blur-[110px]"></div><div class="absolute top-1/2 -right-16 w-80 h-80 rounded-full bg-secondary/8 blur-[130px]"></div></div><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_16px_rgba(0,0,0,0.35)]"><div class="h-16 px-gutter-mobile flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Volver" class="w-11 h-11 flex items-center justify-center text-on-surface hover:text-primary transition-colors rounded-full active:bg-surface-container-high" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-title-lg text-title-lg text-on-surface tracking-tight truncate max-w-[210px]">Detalle Del Lote</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Certificado de origen" class="w-11 h-11 flex items-center justify-center text-secondary hover:text-secondary-fixed transition-colors rounded-full"><span class="material-symbols-outlined text-[22px]">qr_code_scanner</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(145,213,175,0.3)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface z-10 px-gutter-mobile"><div class="flex flex-col w-full pb-10 space-y-5">
+<!-- Sub-header & Status Strip -->
+<div class="flex flex-col space-y-1">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md uppercase tracking-wider text-primary flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+        Ruta en Operación Local
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">offline_pin</span> 100% Sin Nube
+      </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+      Consolidación de ventas, cobranza y arqueo de ruta
+    </p>
+</div>
+<!-- Hero Card: Active Jornada Cierre -->
+<section class="relative overflow-hidden rounded-3xl bg-surface-container p-5 shadow-2xl transition-all duration-300">
+<!-- Aurora ambient glow layers -->
+<div class="absolute -top-16 -left-12 w-48 h-48 rounded-full bg-primary/20 blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-16 -right-12 w-48 h-48 rounded-full bg-secondary/15 blur-3xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col space-y-4">
+<!-- Card Header / Meta -->
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]" style="font-variation-settings: 'FILL' 1;">wb_twilight</span>
+<h2 class="font-title-lg text-title-lg text-on-surface font-semibold tracking-tight">
+              24 de Octubre de 2025
+            </h2>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[15px]">local_shipping</span> Turno Matutino • Unidad 04 (Ruta Norte)
+          </span>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-primary/15 text-primary font-label-md text-label-md shadow-sm">
+          Activa
+        </span>
+</div>
+<!-- Main Metric Focus Banner -->
+<div class="rounded-2xl bg-surface-container-low p-4 flex items-center justify-between shadow-inner">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block uppercase tracking-wider">Cobranza Efectivo / Total</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-secondary font-bold tracking-tight">
+            $24,850<span class="text-title-sm font-medium text-secondary-fixed">.00 MXN</span>
+</span>
+</div>
+<div class="w-12 h-12 rounded-2xl bg-secondary-container/40 flex items-center justify-center text-secondary shadow-md">
+<span class="material-symbols-outlined text-[26px]">payments</span>
+</div>
+</div>
+<!-- Tonal M3 Metric Grid -->
+<div class="grid grid-cols-2 gap-2.5">
+<!-- Credito -->
+<div class="rounded-2xl bg-surface-container-low p-3.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Ventas Crédito</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">receipt_long</span>
+</div>
+<span class="font-title-md text-title-md text-on-surface font-semibold">$6,320.00</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Documentadas</span>
+</div>
+<!-- Abonos -->
+<div class="rounded-2xl bg-surface-container-low p-3.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Abonos Cobrados</span>
+<span class="material-symbols-outlined text-primary text-[16px]">price_check</span>
+</div>
+<span class="font-title-md text-title-md text-primary font-semibold">$2,000.00</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Saldos previos</span>
+</div>
+<!-- Cajas -->
+<div class="rounded-2xl bg-surface-container-low p-3.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cajas Totales</span>
+<span class="material-symbols-outlined text-secondary text-[16px]">inventory_2</span>
+</div>
+<span class="font-title-md text-title-md text-on-surface font-semibold">64.5 Cajas</span>
+<span class="font-label-sm text-label-sm text-secondary">Fraccionadas</span>
+</div>
+<!-- Kilogramos -->
+<div class="rounded-2xl bg-surface-container-low p-3.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Peso Neto</span>
+<span class="material-symbols-outlined text-primary text-[16px]">scale</span>
+</div>
+<span class="font-title-md text-title-md text-on-surface font-semibold">1,348.65 kg</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Báscula certificada</span>
+</div>
+</div>
+<!-- Compact Row: Entregas & Deuda Pendiente -->
+<div class="rounded-2xl bg-surface-container-low p-3.5 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">storefront</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface">8 notas emitidas</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">12 clientes visitados</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-error block">Riesgo en ruta</span>
+<span class="font-title-sm text-title-sm text-error font-medium">$5,990.00 MXN</span>
+</div>
+</div>
+<!-- Primary Action CTA with Aurora Pulsing Halo -->
+<div class="pt-2">
+<button class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(145,213,175,0.35)] active:scale-[0.98] transition-transform" id="btnEjecutarCierre" onclick="abrirConfirmacion()">
+<span class="material-symbols-outlined text-[20px]">lock_reset</span>
+          Ejecutar Cierre Diario de Hoy
+        </button>
+</div>
+</div>
+</section>
+<!-- Document Generation & Export Section -->
+<section class="flex flex-col space-y-3">
+<div class="flex items-center justify-between">
+<h3 class="font-title-md text-title-md text-on-surface font-semibold">
+        Documentos &amp; Exportación
+      </h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">sd_storage</span> Local SQLite
+      </span>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<!-- Exportar PDF -->
+<button class="h-14 rounded-2xl bg-surface-container-high text-on-surface p-3 flex items-center gap-3 active:bg-surface-bright transition-all shadow-md" onclick="simularExportacion('PDF')">
+<div class="w-9 h-9 rounded-xl bg-surface-container-lowest flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</div>
+<div class="flex flex-col text-left">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Exportar PDF</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Arqueo impreso</span>
+</div>
+</button>
+<!-- Exportar JSON -->
+<button class="h-14 rounded-2xl bg-surface-container-high text-on-surface p-3 flex items-center gap-3 active:bg-surface-bright transition-all shadow-md" onclick="simularExportacion('JSON')">
+<div class="w-9 h-9 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">data_object</span>
+</div>
+<div class="flex flex-col text-left">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Exportar JSON</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Copia de respaldo</span>
+</div>
+</button>
+</div>
+</section>
+<!-- Visual Proof: Batch Freshness Origin Card -->
+<div class="rounded-2xl bg-surface-container-low overflow-hidden relative p-4 flex items-center justify-between shadow-lg">
+<div class="flex items-center gap-3 z-10">
+<img class="w-14 h-14 rounded-xl object-cover shadow" data-alt="Close-up of fresh premium grade organic eggs packed in commercial delivery trays inside a delivery truck at dawn with golden warm side light and crisp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtDfbPhOImm9IDQGTis3kt-fiH1Arr1HaVRuICrwsfRIKQMP9mICb3KQpkC2OB5d9H8gcct3c34tBbL-6cc0slr7EGeB0-c8uEiuOx6Ed-f2JzSgvbB9tFTiO10b-ojJMiy8oqInulZtlJIJW3vIxPzwWNtSewW9nACn_S4xEjNP64jg1vInQdq4Umxty5fCzIk72TkyXJrinYfhH-YMiNUP8cA-pJLocTS8MWsG5H"/>
+<div>
+<span class="font-label-md text-label-md text-secondary font-semibold block">Trazabilidad de Granja</span>
+<span class="font-body-sm text-body-sm text-on-surface">Lote: HHYH-20251024-N4</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant block">Huevo Blanco San Juan Clásico</span>
+</div>
+</div>
+<div class="z-10 bg-secondary/15 text-secondary p-2 rounded-full">
+<span class="material-symbols-outlined text-[20px]">verified</span>
+</div>
+</div>
+<!-- Historical Closings Section -->
+<section class="flex flex-col space-y-3">
+<div class="flex items-center justify-between">
+<h3 class="font-title-md text-title-md text-on-surface font-semibold">
+        Cierres Anteriores
+      </h3>
+<span class="font-label-sm text-label-sm text-primary">Últimos 3 días</span>
+</div>
+<div class="flex flex-col space-y-2.5">
+<!-- Cierre 23 Oct -->
+<div class="rounded-2xl bg-surface-container p-3.5 flex flex-col space-y-3 shadow-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">23 Oct 2025</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">Turno Matutino</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low rounded-xl px-3 py-2">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Monto Consolidado</span>
+<span class="font-title-md text-title-md text-secondary font-semibold">$28,400.00 MXN</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Volumen</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">72.0 Cajas</span>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="verDetalle('23 Oct 2025', '$28,400.00', '72.0')">
+<span class="material-symbols-outlined text-[16px]">visibility</span> Detalle
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="simularExportacion('PDF 23-OCT')">
+<span class="material-symbols-outlined text-[16px]">download</span> PDF
+          </button>
+</div>
+</div>
+<!-- Cierre 22 Oct -->
+<div class="rounded-2xl bg-surface-container p-3.5 flex flex-col space-y-3 shadow-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">22 Oct 2025</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">Turno Vespertino</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low rounded-xl px-3 py-2">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Monto Consolidado</span>
+<span class="font-title-md text-title-md text-secondary font-semibold">$21,150.00 MXN</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Volumen</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">55.5 Cajas</span>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="verDetalle('22 Oct 2025', '$21,150.00', '55.5')">
+<span class="material-symbols-outlined text-[16px]">visibility</span> Detalle
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="simularExportacion('PDF 22-OCT')">
+<span class="material-symbols-outlined text-[16px]">download</span> PDF
+          </button>
+</div>
+</div>
+<!-- Cierre 21 Oct -->
+<div class="rounded-2xl bg-surface-container p-3.5 flex flex-col space-y-3 shadow-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">21 Oct 2025</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">Turno Matutino</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low rounded-xl px-3 py-2">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Monto Consolidado</span>
+<span class="font-title-md text-title-md text-secondary font-semibold">$30,200.00 MXN</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Volumen</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">80.0 Cajas</span>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-1">
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="verDetalle('21 Oct 2025', '$30,200.00', '80.0')">
+<span class="material-symbols-outlined text-[16px]">visibility</span> Detalle
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high text-secondary font-label-md text-label-md flex items-center gap-1 active:bg-surface-bright" onclick="simularExportacion('PDF 21-OCT')">
+<span class="material-symbols-outlined text-[16px]">download</span> PDF
+          </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Interactive Modal: Confirmación de Cierre -->
+<div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-surface-container-lowest/80 backdrop-blur-md hidden transition-opacity duration-200" id="modalConfirmacion">
+<div class="w-full max-w-sm rounded-3xl bg-surface-container-high p-5 shadow-2xl flex flex-col space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-container/50 text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">task_alt</span>
+</div>
+<div>
+<h4 class="font-title-md text-title-md text-on-surface font-semibold">¿Bloquear Arqueo de Ruta?</h4>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Jornada 24 Oct 2025</span>
+</div>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+        Al confirmar, se consolidará el efectivo de <strong class="text-secondary">$24,850.00 MXN</strong>, se generará el folio fiscal local de entrega y se cerrarán las 8 notas de la Unidad 04.
+      </p>
+<div class="flex items-center gap-2 pt-2">
+<button class="flex-1 h-11 rounded-full bg-surface-container text-on-surface font-label-md text-label-md active:bg-surface-container-lowest" onclick="cerrarConfirmacion()">
+          Cancelar
+        </button>
+<button class="flex-1 h-11 rounded-full bg-primary text-on-primary font-label-md text-label-md font-semibold shadow-md active:scale-95 transition-transform" onclick="completarCierre()">
+          Confirmar
+        </button>
+</div>
+</div>
+</div>
+<!-- Toast Notification -->
+<div class="fixed bottom-6 left-4 right-4 z-50 hidden" id="toastNotification">
+<div class="mx-auto max-w-sm rounded-2xl bg-surface-container-highest px-4 py-3 shadow-2xl flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]" id="toastIcon">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium" id="toastMsg">Acción completada</span>
+</div>
+</div>
+</div>
+<script>
+  function abrirConfirmacion() {
+    const modal = document.getElementById('modalConfirmacion');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function cerrarConfirmacion() {
+    const modal = document.getElementById('modalConfirmacion');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function showToast(msg, icon = 'check_circle') {
+    const toast = document.getElementById('toastNotification');
+    const toastMsg = document.getElementById('toastMsg');
+    const toastIcon = document.getElementById('toastIcon');
+    if (toast && toastMsg && toastIcon) {
+      toastMsg.textContent = msg;
+      toastIcon.textContent = icon;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3200);
+    }
+  }
+
+  function completarCierre() {
+    cerrarConfirmacion();
+    const btn = document.getElementById('btnEjecutarCierre');
+    if (btn) {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[20px] text-primary">verified</span> Cierre 24 Oct Consolidado';
+      btn.classList.remove('bg-primary', 'text-on-primary');
+      btn.classList.add('bg-surface-container-high', 'text-primary');
+      btn.disabled = true;
+    }
+    showToast('Cierre ejecutado y guardado en almacenamiento local.', 'task_alt');
+  }
+
+  function simularExportacion(tipo) {
+    showToast('Generando archivo local ' + tipo + '...', 'file_download');
+  }
+
+  function verDetalle(fecha, monto, cajas) {
+    showToast(fecha + ': ' + monto + ' con ' + cajas + ' cajas entregadas.', 'info');
+  }
+</script></main></body></html>
