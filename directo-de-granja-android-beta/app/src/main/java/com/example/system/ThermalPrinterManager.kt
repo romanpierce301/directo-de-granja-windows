@@ -65,7 +65,7 @@ class ThermalPrinterManager(private val context: Context) {
 
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        private const val USB_PERMISSION_ACTION = "com.aistudio.hyhhuevos.qmzpkt.USB_PERMISSION"
+        private const val USB_PERMISSION_ACTION = "com.aistudio.directodegranja.USB_PERMISSION"
         private const val LINE_WIDTH_CHARS = 38
         private const val DISCOVERY_DURATION_MS = 15_000L
         private val PRINTER_SERVICE_UUIDS = setOf(

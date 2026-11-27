@@ -166,9 +166,6 @@ private val drawerModules = buildList {
         DrawerModuleItem(HyhRoutes.NUEVA_ENTREGA, "Nueva Entrega", Icons.Default.AddCircleOutline, "drawer_nueva_entrega"),
         DrawerModuleItem(HyhRoutes.ENTREGAS_REALIZADAS, "Entregas Realizadas", Icons.Default.ReceiptLong, "drawer_entregas"),
     ))
-    if (BuildConfig.FLAVOR == "lili") {
-        add(DrawerModuleItem(HyhRoutes.CREMERIA, "Cremería del Patrón", Icons.Default.Store, "drawer_cremeria"))
-    }
     if (BuildConfig.FLAVOR == "directodegranja") {
         addAll(listOf(
             DrawerModuleItem(HyhRoutes.SYNC_WINDOWS, "Sincronizar con Windows", Icons.Default.ReceiptLong, "drawer_sync_windows"),

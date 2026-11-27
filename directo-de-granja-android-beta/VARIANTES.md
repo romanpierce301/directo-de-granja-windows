@@ -1,14 +1,14 @@
-# Variantes de la app
+# Directo de Granja para Android
 
-La app permite instalar distintas marcas desde el mismo código compartido. Las variantes son independientes: cada una tiene nombre, colores, ícono y carpeta local de datos.
+Este módulo contiene una sola variante distribuible: Directo de Granja. Usa Room/SQLite local y el mismo código funcional que está en este repositorio.
 
-## Variantes actuales
+## Identidad de la aplicación
 
-- `hyhhuevos`: H y H HUEVOS.
-- `lili`: Distribuidora de Huevos LILI.
-- `directodegranja`: Directo de Granja. Esta variante conserva la lógica y base Room de Android, y es el punto de partida para integrar la sincronización.
+- Flavor: `directodegranja`.
+- Identificador Android: `com.aistudio.directodegranja`.
+- Recursos de marca: `app/src/directodegranja/res`.
 
-Los nombres, colores, prefijos y carpetas se configuran en `app/build.gradle.kts`. Los textos e imágenes propios están en `app/src/<variante>/res`.
+El proyecto Android original con otras marcas está en su repositorio separado. Este módulo de Windows genera únicamente la variante Directo.
 
 ## Compilar
 
@@ -18,12 +18,12 @@ En Android Studio elige la variante `directodegranjaDebug`. También se puede co
 ./gradlew assembleDirectodegranjaDebug
 ```
 
-La app nueva usa el identificador `com.aistudio.directodegranja`, por lo que se puede instalar junto a H y H o LILI para probarla. Al instalarla aparece con una base local nueva; no mueve automáticamente los datos de otra variante. La app tiene una función de respaldo y restauración que puede servir para trasladar información, pero antes de cambiar de app hay que probar la importación con una copia del respaldo.
+Al instalarla se crea una base local propia; no importa automáticamente datos de otra app. La app incluye respaldo y restauración local.
 
 ## Recursos de marca
 
-- Logo de tickets y PDF: `app/src/<variante>/res/drawable/img_ticket_logo.png`.
-- Imagen de bienvenida: `app/src/<variante>/res/drawable/img_welcome_hero.jpg`.
-- Ícono: `app/src/<variante>/res/mipmap-*`.
+- Logo de tickets y PDF: `app/src/directodegranja/res/drawable/img_ticket_logo.png`.
+- Imagen de bienvenida: `app/src/directodegranja/res/drawable/img_welcome_hero.jpg`.
+- Ícono: `app/src/directodegranja/res/mipmap-*`.
 
-La variante `directodegranja` se preparó con el logotipo incluido en el proyecto de Windows. H y H y LILI mantienen sus propios recursos y configuración.
+El flavor Android de LILI y el flavor H y H no se compilan desde este repositorio.

@@ -13,22 +13,22 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.hyhhuevos.qmzpkt"
+    applicationId = "com.aistudio.directodegranja"
     minSdk = 24
     targetSdk = 36
     versionCode = 3
     versionName = "1.2"
 
-    // Branding base (H y H HUEVOS)
-    buildConfigField("String", "BRAND_APP_NAME", "\"H y H HUEVOS\"")
-    buildConfigField("String", "BRAND_SLOGAN", "\"LOS MAS FRESCOS DE LA ZONA\"")
-    buildConfigField("String", "BRAND_PRIMARY", "\"#91D5AF\"")
-    buildConfigField("String", "BRAND_PRIMARY_CONTAINER", "\"#76B995\"")
-    buildConfigField("String", "BRAND_PRIMARY_GLOW", "\"#34D399\"")
-    buildConfigField("String", "BRAND_FILE_PREFIX", "\"HYH\"")
-    buildConfigField("String", "BRAND_TICKETS_FOLDER", "\"HYH_Huevos\"")
-    buildConfigField("String", "BRAND_CLOSINGS_FOLDER", "\"HYH_Cierres\"")
-    buildConfigField("String", "BRAND_BACKUPS_FOLDER", "\"HYH_Backups\"")
+    // The embedded Android project builds only the Directo de Granja product.
+    buildConfigField("String", "BRAND_APP_NAME", "\"Directo de Granja\"")
+    buildConfigField("String", "BRAND_SLOGAN", "\"Te faltan huevos a nosotros nos sobran\"")
+    buildConfigField("String", "BRAND_PRIMARY", "\"#8A2BE2\"")
+    buildConfigField("String", "BRAND_PRIMARY_CONTAINER", "\"#1F0E3B\"")
+    buildConfigField("String", "BRAND_PRIMARY_GLOW", "\"#C084FC\"")
+    buildConfigField("String", "BRAND_FILE_PREFIX", "\"DIRECTO\"")
+    buildConfigField("String", "BRAND_TICKETS_FOLDER", "\"Directo_de_Granja\"")
+    buildConfigField("String", "BRAND_CLOSINGS_FOLDER", "\"Directo_de_Granja_Cierres\"")
+    buildConfigField("String", "BRAND_BACKUPS_FOLDER", "\"Directo_de_Granja_Respaldos\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -78,26 +78,8 @@ android {
 
   flavorDimensions += "brand"
   productFlavors {
-    create("hyhhuevos") {
-      // Marca base (H y H HUEVOS). Usa el applicationId y recursos de main.
-    }
-    create("lili") {
-      // Variante: Distribuidora de Huevos LILI
-      applicationId = "com.aistudio.hyhhuevos.lili"
-      versionCode = 4
-      versionName = "1.3"
-      buildConfigField("String", "BRAND_APP_NAME", "\"Distribuidora de Huevos LILI\"")
-      buildConfigField("String", "BRAND_SLOGAN", "\"Tenemos los huevos que te hacen falta\"")
-      buildConfigField("String", "BRAND_PRIMARY", "\"#91D5AF\"")
-      buildConfigField("String", "BRAND_PRIMARY_CONTAINER", "\"#76B995\"")
-      buildConfigField("String", "BRAND_PRIMARY_GLOW", "\"#34D399\"")
-      buildConfigField("String", "BRAND_FILE_PREFIX", "\"LILI\"")
-      buildConfigField("String", "BRAND_TICKETS_FOLDER", "\"LILI_Tickets\"")
-      buildConfigField("String", "BRAND_CLOSINGS_FOLDER", "\"LILI_Cierres\"")
-      buildConfigField("String", "BRAND_BACKUPS_FOLDER", "\"LILI_Backups\"")
-    }
     create("directodegranja") {
-      // Variante Directo de Granja: comparte el código y Room local con las otras marcas.
+      // Única variante distribuible en este repositorio.
       applicationId = "com.aistudio.directodegranja"
       versionCode = 1
       versionName = "1.0"

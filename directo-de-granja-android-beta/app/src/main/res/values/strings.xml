@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">H y H HUEVOS</string>
-    <string name="brand_slogan">LOS MAS FRESCOS DE LA ZONA</string>
+    <string name="app_name">Directo de Granja</string>
+    <string name="brand_slogan">Te faltan huevos a nosotros nos sobran</string>
     <string name="credit_commitment_legend">El cliente reconoce y acepta el saldo pendiente de esta entrega, comprometiéndose a liquidarlo en la fecha límite de pago establecida.</string>
     <string name="exit_delivery_title">¿Estás seguro de que quieres salir?</string>
     <string name="exit_delivery_confirm">Sí, salir</string>
