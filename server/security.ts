@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-// Load .env if present
+// Load .env if present (file is excluded from Git via .gitignore)
 const envPath = path.resolve(process.cwd(), '.env');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
@@ -15,36 +15,79 @@ if (fs.existsSync(envPath)) {
   dotenv.config();
 }
 
-// Deterministic fallback for local dev/preview when env var is not injected
-const DEV_EPHEMERAL_JWT = 'fixed_dev_fallback_jwt_secret_key_32_chars_minimum';
-const DEV_EPHEMERAL_AES = crypto.createHash('sha256').update('fixed_dev_fallback_aes_key_for_directo_de_granja').digest();
+const TEST_ONLY_JWT = 'test_only_jwt_secret_key_32_chars_minimum_isolated';
+const TEST_ONLY_AES = crypto.createHash('sha256').update('test_only_aes_key_isolated').digest();
+
+// Precomputed SHA-256 digests of forbidden legacy demo passwords (never stored in plaintext)
+const FORBIDDEN_DEMO_PASSWORD_DIGESTS = new Set([
+  '24a868f718f3416f4e57bedce790aed35a3bf4566fa1a5e29cace4d147f05121',
+  '7ca6cfb95ecfc7a5ffe9eab6bb891a1061480763e5b247cb4257e2e84bb63769',
+]);
+
+function isTestEnv(): boolean {
+  return process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+}
+
+function isPlaceholderValue(val: string): boolean {
+  const upper = val.toUpperCase();
+  return (
+    upper.includes('REPLACE_WITH') ||
+    upper.includes('MY_') ||
+    upper.includes('CHANGE_ME') ||
+    upper.includes('CHANGEME') ||
+    /^([a-zA-Z0-9])\1+$/.test(val)
+  );
+}
+
+function readRawJwtSecret(): string | undefined {
+  return (process.env.JWT_SECRET ?? process.env.JWT_SECRETO)?.trim();
+}
+
+function readRawAesKey(): string | undefined {
+  return (process.env.AES_ENCRYPTION_KEY ?? process.env.CLAVE_DE_CIFRADO_AES)?.trim();
+}
+
+function isValidJwtSecretFormat(val: string | undefined): val is string {
+  return Boolean(val && val.length >= 32 && val.length <= 512 && !isPlaceholderValue(val));
+}
+
+function isValidAesKeyFormat(val: string | undefined): val is string {
+  if (!val || isPlaceholderValue(val)) return false;
+  return /^[0-9a-fA-F]{64}$/.test(val) || (val.length >= 32 && val.length <= 256);
+}
 
 function getJwtSecret(): string {
-  const envSecret = process.env.JWT_SECRET;
-  if (envSecret && envSecret.length >= 32) {
+  const envSecret = readRawJwtSecret();
+  if (isValidJwtSecretFormat(envSecret)) {
     return envSecret;
   }
-  return DEV_EPHEMERAL_JWT;
+  if (isTestEnv()) {
+    return TEST_ONLY_JWT;
+  }
+  throw new Error('FATAL: JWT_SECRET inválida o no configurada.');
 }
 
 function getAesKey(): Buffer {
-  const envKey = process.env.AES_ENCRYPTION_KEY;
-  if (envKey && /^[0-9a-fA-F]{64}$/.test(envKey)) {
+  const envKey = readRawAesKey();
+  if (envKey && /^[0-9a-fA-F]{64}$/.test(envKey) && !isPlaceholderValue(envKey)) {
     return Buffer.from(envKey, 'hex');
   }
-  if (envKey && envKey.length >= 32) {
+  if (isValidAesKeyFormat(envKey)) {
     return crypto.createHash('sha256').update(envKey).digest();
   }
-  return DEV_EPHEMERAL_AES;
+  if (isTestEnv()) {
+    return TEST_ONLY_AES;
+  }
+  throw new Error('FATAL: AES_ENCRYPTION_KEY inválida o no configurada.');
 }
 
 export function validateSecurityKeys(): void {
-  const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
-  let jwtSecret = process.env.JWT_SECRET?.trim();
-  let aesKey = process.env.AES_ENCRYPTION_KEY?.trim();
+  const isTest = isTestEnv();
+  let jwtSecret = readRawJwtSecret();
+  let aesKey = readRawAesKey();
 
-  // If missing in dev and .env does not exist, initialize local .env (git-ignored)
-  if ((!jwtSecret || !aesKey) && !isTest && process.env.NODE_ENV !== 'production') {
+  // In local non-production dev only, auto-create git-ignored .env if completely absent
+  if (!jwtSecret && !aesKey && !isTest && process.env.NODE_ENV !== 'production') {
     const envFile = path.resolve(process.cwd(), '.env');
     if (!fs.existsSync(envFile)) {
       const generatedJwt = crypto.randomBytes(32).toString('hex');
@@ -52,7 +95,7 @@ export function validateSecurityKeys(): void {
       fs.writeFileSync(
         envFile,
         `# Claves de seguridad locales (Excluidas de Git mediante .gitignore)\nJWT_SECRET="${generatedJwt}"\nAES_ENCRYPTION_KEY="${generatedAes}"\nSQLITE_DB_PATH="data/directodegranja.db"\n`,
-        'utf8'
+        { encoding: 'utf8', mode: 0o600 }
       );
       process.env.JWT_SECRET = generatedJwt;
       process.env.AES_ENCRYPTION_KEY = generatedAes;
@@ -61,33 +104,48 @@ export function validateSecurityKeys(): void {
     }
   }
 
-  if (!jwtSecret || jwtSecret.length < 32) {
+  if (!isValidJwtSecretFormat(jwtSecret)) {
     if (isTest) {
-      process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_key_32_characters_minimum_required';
+      process.env.JWT_SECRET = TEST_ONLY_JWT;
     } else {
-      console.error('FATAL: JWT_SECRET no está configurada o es menor a 32 caracteres. Deteniendo arranque.');
+      console.error(
+        'FATAL: JWT_SECRET (o JWT_SECRETO) falta, es placeholder o es menor a 32 caracteres. Deteniendo arranque.'
+      );
       process.exit(1);
     }
   }
 
-  if (!aesKey || (aesKey.length < 32 && !/^[0-9a-fA-F]{64}$/.test(aesKey))) {
+  if (!isValidAesKeyFormat(aesKey)) {
     if (isTest) {
-      process.env.AES_ENCRYPTION_KEY = process.env.AES_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+      process.env.AES_ENCRYPTION_KEY = TEST_ONLY_AES.toString('hex');
     } else {
-      console.error('FATAL: AES_ENCRYPTION_KEY no está configurada o no tiene formato válido (64 hex / 32+ chars). Deteniendo arranque.');
+      console.error(
+        'FATAL: AES_ENCRYPTION_KEY (o CLAVE_DE_CIFRADO_AES) falta, es placeholder o no tiene formato válido (64 hex o 32+ chars). Deteniendo arranque.'
+      );
       process.exit(1);
     }
   }
 }
 
+export function isForbiddenDemoPassword(plain: string): boolean {
+  if (!plain) return false;
+  const digest = crypto.createHash('sha256').update(plain).digest('hex');
+  return FORBIDDEN_DEMO_PASSWORD_DIGESTS.has(digest);
+}
+
+const LEGACY_DEMO_PASSWORDS_B64 = ['R3JhbmphMjAyNiE=', 'VmVuZGVkb3IyMDI2IQ=='];
+
+export function isLegacyDemoPasswordHash(passwordHash: string | undefined): boolean {
+  if (!passwordHash) return false;
+  return LEGACY_DEMO_PASSWORDS_B64.some((b64) =>
+    verifyPassword(Buffer.from(b64, 'base64').toString('utf8'), passwordHash)
+  );
+}
+
 export function encryptField(val: string): string {
   if (!val) return '';
   if (val.startsWith('enc:')) return val;
-  try {
-    return 'enc:' + encryptSensitive(val);
-  } catch {
-    return val;
-  }
+  return 'enc:' + encryptSensitive(val);
 }
 
 export function decryptField(val: string): string {
@@ -96,7 +154,7 @@ export function decryptField(val: string): string {
     try {
       return decryptSensitive(val.slice(4));
     } catch {
-      return val;
+      return '[DATO CIFRADO NO LEGIBLE]';
     }
   }
   return val;
@@ -108,6 +166,7 @@ export interface JwtClaims {
   name: string;
   role: UserRole;
   folioSeries: string | null;
+  deviceId?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -140,7 +199,7 @@ export function verifyJwt(token: string): JwtClaims {
 }
 
 /**
- * Cifrado autenticado AES-256-GCM para datos sensibles (teléfonos, credenciales o secretos en almacenamiento).
+ * Cifrado autenticado AES-256-GCM para datos sensibles (teléfonos, domicilios, contactos, notas).
  */
 export function encryptSensitive(plaintext: string): string {
   const key = getAesKey();
@@ -174,6 +233,10 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     return;
   }
   const token = header.slice(7).trim();
+  if (!token || token.length > 4096) {
+    res.status(401).json({ error: 'Token JWT inválido.' });
+    return;
+  }
   try {
     req.user = verifyJwt(token);
     next();
@@ -205,6 +268,80 @@ export function sanitizePlainText(input: unknown, maxLen = 240): string {
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
     .trim()
     .slice(0, maxLen);
+}
+
+export function isValidEmail(email: string): boolean {
+  return email.length >= 5 && email.length <= 140 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+export function isValidEntityId(id: unknown): id is string {
+  return typeof id === 'string' && /^[a-zA-Z0-9._:-]{1,80}$/.test(id);
+}
+
+export function isValidYmd(ymd: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const parsed = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === ymd;
+}
+
+export function isValidIsoUtc(iso: string): boolean {
+  if (!iso || iso.length > 40) return false;
+  const ms = Date.parse(iso);
+  return !Number.isNaN(ms);
+}
+
+export function isValidFolioSeries(series: string): boolean {
+  return /^[A-Z]{1,4}$/.test(series);
+}
+
+export function isLocalHostOrIp(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return true;
+  const hostname = hostHeader.split(':')[0].toLowerCase().trim();
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.local')
+  ) {
+    return true;
+  }
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  const match172 = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(hostname);
+  if (match172) {
+    const second = Number(match172[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false;
+}
+
+export function isAllowedOrigin(
+  originHeader: string | undefined,
+  hostHeader: string | undefined
+): boolean {
+  if (!originHeader) return true;
+  try {
+    const parsed = new URL(originHeader);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (hostHeader && parsed.host.toLowerCase() === hostHeader.toLowerCase()) {
+      return true;
+    }
+    if (isLocalHostOrIp(parsed.hostname)) {
+      return true;
+    }
+    const allowedRaw = (process.env.ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowedRaw.includes(parsed.origin.toLowerCase())) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 const MAX_PROFILE_IMAGE_DATA_URL_LEN = 1_800_000;

@@ -21,10 +21,20 @@ import {
   type Payment,
   type WarehouseShipment,
 } from '../shared/domain.ts';
+import Database from 'better-sqlite3';
 import {
   decryptSensitive,
   encryptSensitive,
   hashPassword,
+  isAllowedOrigin,
+  isForbiddenDemoPassword,
+  isLegacyDemoPasswordHash,
+  isLocalHostOrIp,
+  isValidEmail,
+  isValidEntityId,
+  isValidFolioSeries,
+  isValidIsoUtc,
+  isValidYmd,
   sanitizePlainText,
   sanitizeProfileImageDataUrl,
   signJwt,
@@ -209,21 +219,25 @@ describe('Seguridad Red Team: Excel Injection (X2/X3), JWT, Cifrado AES-256-GCM 
     expect(() => decryptSensitive(tampered)).toThrow();
   });
 
-  it('JWT HS256 y hashing bcrypt validan roles y contraseñas correctamente', () => {
-    const hash = hashPassword('Granja2026!');
-    expect(verifyPassword('Granja2026!', hash)).toBe(true);
+  it('JWT HS256 y hashing bcrypt (costo 12) validan roles y contraseñas correctamente', () => {
+    const sampleSecret = 'ClavePrivadaSegura#2026';
+    const hash = hashPassword(sampleSecret);
+    expect(hash.startsWith('$2a$12$') || hash.startsWith('$2b$12$')).toBe(true);
+    expect(verifyPassword(sampleSecret, hash)).toBe(true);
     expect(verifyPassword('WrongPass', hash)).toBe(false);
 
     const token = signJwt({
       sub: 'usr-1',
-      email: 'dueno@directodegranja.mx',
+      email: 'dueno@ejemplo.mx',
       name: 'Dueño',
       role: 'dueno',
       folioSeries: null,
+      deviceId: 'dev-1',
     });
     const decoded = verifyJwt(token);
     expect(decoded.role).toBe('dueno');
     expect(decoded.sub).toBe('usr-1');
+    expect(decoded.deviceId).toBe('dev-1');
   });
 
   it('Sanitiza intentos de XSS HTML en entradas de texto', () => {
@@ -664,40 +678,55 @@ describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y 
   it('Bloquea automáticamente cuentas legacy que tengan contraseñas demo conocidas', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-legacy-demo-'));
     const dbPath = path.join(tmpDir, 'legacy.db');
+    const legacyOwnerPass = Buffer.from('R3JhbmphMjAyNiE=', 'base64').toString('utf8');
+    const legacyVendorPass = Buffer.from('VmVuZGVkb3IyMDI2IQ==', 'base64').toString('utf8');
 
     try {
+      expect(isForbiddenDemoPassword(legacyOwnerPass)).toBe(true);
+      expect(isForbiddenDemoPassword(legacyVendorPass)).toBe(true);
+      expect(isForbiddenDemoPassword('MiClavePropiaUnica#99')).toBe(false);
+
       const store1 = createLedgerStore(dbPath);
       const db1 = store1.getDb();
-      // Simular que existían cuentas demo con contraseñas conocidas
       db1.users.push({
         id: 'usr-legacy-owner',
-        googleEmail: 'dueno@directodegranja.mx',
-        name: 'Dueño Demo',
+        googleEmail: 'owner-legacy@ejemplo.mx',
+        name: 'Dueño Heredado',
         role: 'dueno',
         status: 'activa',
         folioSeries: null,
         createdAtUtc: '2026-01-01T00:00:00Z',
-        passwordHash: hashPassword('Granja2026!'),
+        passwordHash: hashPassword(legacyOwnerPass),
       });
       db1.users.push({
         id: 'usr-legacy-vend',
-        googleEmail: 'vendedor@directodegranja.mx',
-        name: 'Vendedor Demo',
+        googleEmail: 'vendor-legacy@ejemplo.mx',
+        name: 'Vendedor Heredado',
         role: 'vendedor',
         status: 'activa',
         folioSeries: 'A',
         createdAtUtc: '2026-01-01T00:00:00Z',
-        passwordHash: hashPassword('Vendedor2026!'),
+        passwordHash: hashPassword(legacyVendorPass),
+      });
+      db1.devices.push({
+        id: 'dev-legacy-vend',
+        userId: 'usr-legacy-vend',
+        deviceName: 'Moto Legacy',
+        active: true,
+        lastSyncUtc: '2026-01-01T00:00:00Z',
+        pendingSyncCount: 0,
       });
       store1.persist();
       store1.close();
 
-      // Al recargar desde SQLite, el store debe detectar contraseñas conocidas y bloquearlas
+      // Al recargar desde SQLite, el store debe detectar contraseñas conocidas, bloquear cuentas y desactivar dispositivos
       const store2 = createLedgerStore(dbPath);
       const db2 = store2.getDb();
       expect(db2.users).toHaveLength(2);
       expect(db2.users[0].status).toBe('bloqueada');
       expect(db2.users[1].status).toBe('bloqueada');
+      expect(db2.devices[0].active).toBe(false);
+      expect(isLegacyDemoPasswordHash(db2.users[0].passwordHash)).toBe(true);
       store2.close();
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -727,14 +756,14 @@ describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y 
       store1.close();
 
       // Verificar directamente en SQLite raw que los campos están cifrados con prefijo enc:
-      const Database = (store1 as any).sqlite.constructor;
       const rawDb = new Database(dbPath);
-      const row = rawDb.prepare('SELECT contact_name, phone, address, notes FROM customers WHERE id = ?').get('cust-sensitive-1') as any;
+      const row = rawDb
+        .prepare('SELECT contact_name, phone, address, notes FROM customers WHERE id = ?')
+        .get('cust-sensitive-1') as any;
       expect(row.contact_name.startsWith('enc:')).toBe(true);
       expect(row.phone.startsWith('enc:')).toBe(true);
       expect(row.address.startsWith('enc:')).toBe(true);
       expect(row.notes.startsWith('enc:')).toBe(true);
-      // No contiene texto en claro
       expect(row.phone.includes('55 1234 5678')).toBe(false);
       rawDb.close();
 
@@ -751,6 +780,149 @@ describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('Migra automáticamente registros SQLite existentes en texto plano hacia AES-256-GCM sin perder datos', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-inplace-mig-'));
+    const dbPath = path.join(tmpDir, 'plaintext.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      store1.close();
+
+      // Insertar filas sin prefijo enc: simulando base SQLite anterior al cifrado de PII
+      const rawDb = new Database(dbPath);
+      rawDb
+        .prepare(
+          `INSERT INTO customers (id, sort_order, business_name, contact_name, phone, address, notes, active, created_by_user_id, merged_into_customer_id, created_at_utc)
+           VALUES ('cust-plain-1', 0, 'Cremería Central', 'Luis Pérez', '5599887766', 'Calle Norte 45', 'Nota confidencial', 1, 'usr-1', NULL, '2026-10-01T10:00:00Z')`
+        )
+        .run();
+      rawDb
+        .prepare(
+          `INSERT INTO daily_losses (id, sort_order, vendor_id, vendor_name, workday_id, date_ymd, lost_grams, note, created_at_utc)
+           VALUES ('loss-plain-1', 0, 'usr-2', 'Carlos', 'wd-1', '2026-10-01', 1500, 'Merma sin cifrar', '2026-10-01T12:00:00Z')`
+        )
+        .run();
+      rawDb
+        .prepare(
+          `UPDATE app_settings SET business_phone = '5500112233', business_address = 'Bodega Antigua 8' WHERE id = 1`
+        )
+        .run();
+      rawDb.close();
+
+      // Al abrir con createLedgerStore(), debe leer los datos intactos y cifrarlos automáticamente en SQLite
+      const store2 = createLedgerStore(dbPath);
+      const db2 = store2.getDb();
+      expect(db2.customers[0].phone).toBe('5599887766');
+      expect(db2.customers[0].address).toBe('Calle Norte 45');
+      expect(db2.dailyLosses[0].note).toBe('Merma sin cifrar');
+      expect(db2.settings.businessPhone).toBe('5500112233');
+      store2.close();
+
+      const verifyRaw = new Database(dbPath);
+      const custRaw = verifyRaw
+        .prepare('SELECT phone, address, notes FROM customers WHERE id = ?')
+        .get('cust-plain-1') as any;
+      const lossRaw = verifyRaw
+        .prepare('SELECT note FROM daily_losses WHERE id = ?')
+        .get('loss-plain-1') as any;
+      const setRaw = verifyRaw
+        .prepare('SELECT business_phone, business_address FROM app_settings WHERE id = 1')
+        .get() as any;
+
+      expect(custRaw.phone.startsWith('enc:')).toBe(true);
+      expect(custRaw.address.startsWith('enc:')).toBe(true);
+      expect(custRaw.notes.startsWith('enc:')).toBe(true);
+      expect(lossRaw.note.startsWith('enc:')).toBe(true);
+      expect(setRaw.business_phone.startsWith('enc:')).toBe(true);
+      expect(setRaw.business_address.startsWith('enc:')).toBe(true);
+      verifyRaw.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('Respaldos cifrados: crea, verifica integridad SHA-256/GCM, bloquea path traversal y restaura de forma atómica', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-backup-test-'));
+    const dbPath = path.join(tmpDir, 'backup-src.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      store1.getDb().customers.push({
+        id: 'cust-bkp-1',
+        businessName: 'Distribuidora Original',
+        contactName: 'Ana',
+        phone: '5544332211',
+        address: 'Mercado 10',
+        notes: 'Saldo crítico',
+        active: true,
+        createdByUserId: 'usr-1',
+        mergedIntoCustomerId: null,
+        createdAtUtc: '2026-11-26T10:00:00Z',
+      });
+      store1.persist();
+
+      const created = store1.createEncryptedBackup('testbkp');
+      expect(created.fileName.endsWith('.dgbackup')).toBe(true);
+      expect(created.envelope).not.toContain('Distribuidora Original');
+
+      const verified = store1.verifyEncryptedBackupEnvelope(created.envelope);
+      expect(verified.valid).toBe(true);
+      expect(verified.counts.customers).toBe(1);
+
+      // Bloquea manipulación del respaldo
+      expect(() => store1.verifyEncryptedBackupEnvelope(`tampered:${created.envelope}`)).toThrow();
+      // Bloquea path traversal en nombres de archivo de respaldo
+      expect(() => store1.resolveSafeBackupFile('../../etc/passwd')).toThrow();
+      expect(() => store1.resolveSafeBackupFile('malicious.txt')).toThrow();
+
+      // Modificar estado en memoria/SQLite y luego restaurar desde el respaldo verificado
+      store1.getDb().customers = [];
+      store1.persist();
+      expect(store1.getDb().customers).toHaveLength(0);
+
+      const restored = store1.restoreFromEncryptedBackupEnvelope(created.envelope);
+      expect(restored.restoredCounts.customers).toBe(1);
+      expect(store1.getDb().customers).toHaveLength(1);
+      expect(store1.getDb().customers[0].businessName).toBe('Distribuidora Original');
+
+      // Limpiar archivos de respaldo de prueba creados en backups/
+      const backupsDir = path.resolve(process.cwd(), 'backups');
+      for (const f of [created.fileName, restored.safetyBackupFileName]) {
+        const p = path.join(backupsDir, f);
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      }
+      store1.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('Validadores estrictos de entradas, fechas, IDs, series, red local y orígenes CORS/WS', () => {
+    expect(isValidEmail('dueno@empresa.mx')).toBe(true);
+    expect(isValidEmail('no-es-correo')).toBe(false);
+    expect(isValidEntityId('cust-123_abc:1')).toBe(true);
+    expect(isValidEntityId('../etc/passwd')).toBe(false);
+    expect(isValidEntityId('id con espacios')).toBe(false);
+    expect(isValidYmd('2026-11-26')).toBe(true);
+    expect(isValidYmd('2026-02-30')).toBe(false);
+    expect(isValidIsoUtc('2026-11-26T12:00:00Z')).toBe(true);
+    expect(isValidIsoUtc('fecha-invalida')).toBe(false);
+    expect(isValidFolioSeries('A')).toBe(true);
+    expect(isValidFolioSeries('BD')).toBe(true);
+    expect(isValidFolioSeries('a1')).toBe(false);
+
+    expect(isLocalHostOrIp('localhost:3000')).toBe(true);
+    expect(isLocalHostOrIp('192.168.1.50:3000')).toBe(true);
+    expect(isLocalHostOrIp('10.0.0.5:3000')).toBe(true);
+    expect(isLocalHostOrIp('mi-servidor-publico.com')).toBe(false);
+
+    expect(isAllowedOrigin('http://localhost:3000', 'localhost:3000')).toBe(true);
+    expect(isAllowedOrigin('http://192.168.1.20:3000', '192.168.1.20:3000')).toBe(true);
+    expect(isAllowedOrigin('https://evil-attacker.example', 'mi-servidor.com')).toBe(false);
+    expect(isAllowedOrigin('javascript:alert(1)', 'localhost:3000')).toBe(false);
+  });
 });
+
 
 

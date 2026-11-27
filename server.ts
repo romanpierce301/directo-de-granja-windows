@@ -44,6 +44,14 @@ import {
 } from './shared/domain.ts';
 import {
   hashPassword,
+  isAllowedOrigin,
+  isForbiddenDemoPassword,
+  isLocalHostOrIp,
+  isValidEmail,
+  isValidEntityId,
+  isValidFolioSeries,
+  isValidIsoUtc,
+  isValidYmd,
   requireAuth as baseRequireAuth,
   requireRole,
   sanitizePlainText,
@@ -67,11 +75,39 @@ export function requireAuth(req: AuthenticatedRequest, res: express.Response, ne
       res.status(401).json({ error: 'No autenticado.' });
       return;
     }
-    const user = store.getRawUsers().find((u) => u.id === req.user!.sub);
+    const db = store.getDb();
+    const user = db.users.find((u) => u.id === req.user!.sub);
     if (!user || user.status !== 'activa') {
       res.status(403).json({ error: 'Cuenta inactiva, bloqueada o revocada.' });
       return;
     }
+
+    // Verificar que el dispositivo del vendedor no haya sido revocado en cada solicitud protegida
+    if (user.role === 'vendedor' && req.path !== '/api/devices/register') {
+      const candidateDeviceId = sanitizePlainText(
+        req.user.deviceId ??
+          req.headers['x-device-id'] ??
+          req.query?.deviceId ??
+          req.body?.deviceId,
+        80
+      );
+      const vendorDevices = db.devices.filter((d) => d.userId === user.id);
+      if (candidateDeviceId) {
+        const matched = vendorDevices.find((d) => d.id === candidateDeviceId);
+        if (!matched || !matched.active) {
+          res.status(403).json({
+            error: 'Dispositivo revocado o pendiente de autorización por el dueño.',
+          });
+          return;
+        }
+      } else if (vendorDevices.length > 0 && !vendorDevices.some((d) => d.active)) {
+        res.status(403).json({
+          error: 'Todos los dispositivos de esta cuenta han sido revocados o bloqueados.',
+        });
+        return;
+      }
+    }
+
     next();
   });
 }
@@ -79,21 +115,103 @@ export function requireAuth(req: AuthenticatedRequest, res: express.Response, ne
 async function bootstrap() {
   const app = express();
   const httpServer = http.createServer(app);
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  // Security headers compatible with AI Studio preview iframe
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      xFrameOptions: false,
-    })
-  );
+  if (isProduction) {
+    app.set('trust proxy', 1);
+
+    // Exigir HTTPS fuera de la red local en producción
+    app.use((req, res, next) => {
+      if (process.env.ALLOW_INSECURE_HTTP === 'true') {
+        next();
+        return;
+      }
+      const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+      if (!isHttps && !isLocalHostOrIp(req.headers.host)) {
+        if (req.path.startsWith('/api/')) {
+          res.status(426).json({
+            error: 'Se requiere conexión HTTPS segura fuera de la red local.',
+          });
+          return;
+        }
+        const host = req.headers.host;
+        if (host) {
+          res.redirect(301, `https://${host}${req.originalUrl}`);
+          return;
+        }
+      }
+      next();
+    });
+
+    // Restringir orígenes CORS en producción (sin wildcard *)
+    app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      if (origin && !isAllowedOrigin(origin, req.headers.host)) {
+        res.status(403).json({ error: 'Origen no autorizado.' });
+        return;
+      }
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Device-Id');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+      }
+      if (req.method === 'OPTIONS') {
+        res.status(204).end();
+        return;
+      }
+      next();
+    });
+
+    // Cabeceras web seguras + CSP compatible con la app en producción
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api/docs')) {
+        helmet({ contentSecurityPolicy: false })(req, res, next);
+        return;
+      }
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:', 'blob:'],
+            fontSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'", 'ws:', 'wss:'],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            frameAncestors: ["'self'"],
+            formAction: ["'self'"],
+          },
+        },
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      })(req, res, next);
+    });
+  } else {
+    // Desarrollo / vista previa AI Studio (configuración separada compatible con iframe y Vite)
+    app.use(
+      helmet({
+        contentSecurityPolicy: false,
+        crossOriginEmbedderPolicy: false,
+        xFrameOptions: false,
+      })
+    );
+  }
 
   app.use(express.json({ limit: '2mb' }));
 
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiadas peticiones al servidor. Espere un momento.' },
+  });
+  app.use('/api/', apiLimiter);
+
   const authLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 30,
+    max: 20,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Demasiados intentos de autenticación. Espere un minuto.' },
@@ -107,25 +225,98 @@ async function bootstrap() {
     message: { error: 'Límite de peticiones de sincronización excedido.' },
   });
 
-  // WebSocket server for real-time sync & proactive alerts
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  const wsClients = new Set<{ ws: WebSocket; userId: string; role: string }>();
+  // WebSocket server protegido igual que la API (límite 16 KB por mensaje)
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/ws',
+    maxPayload: 16 * 1024,
+  });
+  const wsClients = new Set<{
+    ws: WebSocket;
+    userId: string;
+    role: string;
+    deviceId?: string;
+    msgTimestamps: number[];
+  }>();
+
+  function closeUserSockets(userId: string, onlyDeviceId?: string, reason = 'Sesión o dispositivo revocado') {
+    for (const c of wsClients) {
+      if (c.userId !== userId) continue;
+      if (onlyDeviceId && c.deviceId && c.deviceId !== onlyDeviceId) continue;
+      try {
+        c.ws.close(4003, reason);
+      } catch {
+        // Ignore close errors on terminating socket
+      }
+      wsClients.delete(c);
+    }
+  }
 
   wss.on('connection', (ws, req) => {
     try {
+      if (isProduction) {
+        if (!isAllowedOrigin(req.headers.origin, req.headers.host)) {
+          ws.close(4003, 'Origen WebSocket no autorizado');
+          return;
+        }
+        const isHttps =
+          Boolean((req.socket as { encrypted?: boolean }).encrypted) ||
+          req.headers['x-forwarded-proto'] === 'https';
+        if (
+          process.env.ALLOW_INSECURE_HTTP !== 'true' &&
+          !isHttps &&
+          !isLocalHostOrIp(req.headers.host)
+        ) {
+          ws.close(4003, 'Se requiere WSS seguro fuera de la red local');
+          return;
+        }
+      }
+
       const url = new URL(req.url ?? '', `http://${req.headers.host ?? 'localhost'}`);
-      const token = url.searchParams.get('token') ?? '';
-      if (!token) {
+      const authHeader = req.headers.authorization;
+      const bearerToken =
+        typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+          ? authHeader.slice(7).trim()
+          : '';
+      const token = bearerToken || (url.searchParams.get('token') ?? '');
+      if (!token || token.length > 4096) {
         ws.close(4001, 'Token JWT requerido');
         return;
       }
+
       const claims = verifyJwt(token);
-      const user = store.getRawUsers().find((u) => u.id === claims.sub);
+      const db = store.getDb();
+      const user = db.users.find((u) => u.id === claims.sub);
       if (!user || user.status !== 'activa') {
         ws.close(4003, 'Cuenta inactiva o bloqueada');
         return;
       }
-      const client = { ws, userId: claims.sub, role: claims.role };
+
+      const deviceId = sanitizePlainText(
+        claims.deviceId ?? url.searchParams.get('deviceId') ?? req.headers['x-device-id'],
+        80
+      );
+      if (user.role === 'vendedor') {
+        const vendorDevices = db.devices.filter((d) => d.userId === user.id);
+        if (deviceId) {
+          const matched = vendorDevices.find((d) => d.id === deviceId);
+          if (!matched || !matched.active) {
+            ws.close(4003, 'Dispositivo revocado o no autorizado');
+            return;
+          }
+        } else if (vendorDevices.length > 0 && !vendorDevices.some((d) => d.active)) {
+          ws.close(4003, 'Sin dispositivo activo autorizado');
+          return;
+        }
+      }
+
+      const client = {
+        ws,
+        userId: claims.sub,
+        role: claims.role,
+        deviceId: deviceId || undefined,
+        msgTimestamps: [] as number[],
+      };
       wsClients.add(client);
 
       ws.send(
@@ -136,6 +327,26 @@ async function bootstrap() {
         })
       );
 
+      // Limitar tamaño y frecuencia de mensajes entrantes WebSocket
+      ws.on('message', (rawData) => {
+        const byteLen = Buffer.isBuffer(rawData)
+          ? rawData.byteLength
+          : Buffer.byteLength(String(rawData), 'utf8');
+        if (byteLen > 4096) {
+          ws.close(1009, 'Mensaje WebSocket demasiado grande');
+          wsClients.delete(client);
+          return;
+        }
+        const now = Date.now();
+        client.msgTimestamps = client.msgTimestamps.filter((ts) => now - ts < 10_000);
+        client.msgTimestamps.push(now);
+        if (client.msgTimestamps.length > 15) {
+          ws.close(1008, 'Límite de frecuencia de mensajes WebSocket excedido');
+          wsClients.delete(client);
+          return;
+        }
+      });
+
       ws.on('close', () => {
         wsClients.delete(client);
       });
@@ -145,6 +356,7 @@ async function bootstrap() {
   });
 
   function broadcastEvent(type: string, payload: unknown, targetUserId?: string) {
+    const db = store.getDb();
     const timestampUtc = new Date().toISOString();
     const ownerMsg = JSON.stringify({
       type,
@@ -164,6 +376,16 @@ async function bootstrap() {
 
     for (const c of wsClients) {
       if (c.ws.readyState !== WebSocket.OPEN) continue;
+      const currentUser = db.users.find((u) => u.id === c.userId);
+      if (!currentUser || currentUser.status !== 'activa') {
+        try {
+          c.ws.close(4003, 'Cuenta bloqueada o inactiva');
+        } catch {
+          // Ignore
+        }
+        wsClients.delete(c);
+        continue;
+      }
       if (c.role === 'dueno') {
         c.ws.send(ownerMsg);
       } else if (ownerOnlyOrTargeted) {
@@ -225,9 +447,15 @@ async function bootstrap() {
     const email = sanitizePlainText(req.body?.email, 140).toLowerCase();
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
-    if (!name || !email.includes('@') || password.length < 8) {
+    if (!name || !isValidEmail(email) || password.length < 8 || password.length > 128) {
       res.status(400).json({
-        error: 'Nombre, correo válido y contraseña mínima de 8 caracteres son obligatorios.',
+        error: 'Nombre, correo válido y contraseña (8 a 128 caracteres) son obligatorios.',
+      });
+      return;
+    }
+    if (isForbiddenDemoPassword(password)) {
+      res.status(400).json({
+        error: 'No se permite usar contraseñas de demostración conocidas. Elija una clave propia segura.',
       });
       return;
     }
@@ -244,8 +472,7 @@ async function bootstrap() {
     };
     db.users = db.users.filter(
       (u) =>
-        u.googleEmail.toLowerCase() !== 'dueno@directodegranja.mx' &&
-        !u.id.startsWith('usr-vend-')
+        !(u.status === 'bloqueada' && u.role === 'dueno')
     );
     db.users.push(ownerUser);
     store.addAudit(
@@ -271,9 +498,10 @@ async function bootstrap() {
   app.post('/api/auth/login', authLimiter, (req, res) => {
     const email = sanitizePlainText(req.body?.email, 160).toLowerCase();
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const deviceId = sanitizePlainText(req.body?.deviceId, 80);
 
-    if (!email || !password) {
-      res.status(400).json({ error: 'Correo y contraseña requeridos.' });
+    if (!isValidEmail(email) || !password || password.length > 128) {
+      res.status(400).json({ error: 'Correo válido y contraseña requeridos.' });
       return;
     }
 
@@ -284,7 +512,9 @@ async function bootstrap() {
     }
 
     if (user.status === 'bloqueada') {
-      res.status(403).json({ error: 'Cuenta bloqueada por el dueño.' });
+      res.status(403).json({
+        error: 'Cuenta bloqueada por el dueño o por usar credenciales heredadas. Solicite al dueño restablecer su contraseña.',
+      });
       return;
     }
     if (user.status === 'pendiente') {
@@ -298,10 +528,41 @@ async function bootstrap() {
       name: user.name,
       role: user.role,
       folioSeries: user.folioSeries,
+      ...(deviceId ? { deviceId } : {}),
     });
 
     const { passwordHash: _ph, ...safeUser } = user;
     res.json({ token, user: safeUser });
+  });
+
+  app.post('/api/auth/change-password', authLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+    if (!currentPassword || newPassword.length < 8 || newPassword.length > 128) {
+      res.status(400).json({ error: 'Contraseña actual y nueva contraseña (8 a 128 caracteres) requeridas.' });
+      return;
+    }
+    if (isForbiddenDemoPassword(newPassword)) {
+      res.status(400).json({ error: 'No se permiten contraseñas de demostración conocidas.' });
+      return;
+    }
+    const db = store.getDb();
+    const user = db.users.find((u) => u.id === req.user!.sub);
+    if (!user || !user.passwordHash || !verifyPassword(currentPassword, user.passwordHash)) {
+      res.status(401).json({ error: 'La contraseña actual es incorrecta.' });
+      return;
+    }
+    user.passwordHash = hashPassword(newPassword);
+    store.addAudit(
+      'users',
+      user.id,
+      'CAMBIAR_CONTRASENA',
+      `Contraseña actualizada por ${user.name}`,
+      user.id,
+      user.name
+    );
+    store.persist();
+    res.json({ ok: true });
   });
 
   app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -326,9 +587,15 @@ async function bootstrap() {
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
     const role = req.body?.role === 'dueno' ? ('dueno' as const) : ('vendedor' as const);
 
-    if (!name || !email.includes('@') || password.length < 8) {
+    if (!name || !isValidEmail(email) || password.length < 8 || password.length > 128) {
       res.status(400).json({
-        error: 'Nombre, correo válido y contraseña mínima de 8 caracteres son obligatorios.',
+        error: 'Nombre, correo válido y contraseña (8 a 128 caracteres) son obligatorios.',
+      });
+      return;
+    }
+    if (isForbiddenDemoPassword(password)) {
+      res.status(400).json({
+        error: 'No se permite asignar contraseñas de demostración conocidas.',
       });
       return;
     }
@@ -368,13 +635,56 @@ async function bootstrap() {
     res.status(201).json({ user: safe });
   });
 
+  app.post('/api/auth/users/:id/password', authLimiter, requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de usuario inválido.' });
+      return;
+    }
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+    const reactivate = Boolean(req.body?.reactivate);
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      res.status(400).json({ error: 'La nueva contraseña debe tener entre 8 y 128 caracteres.' });
+      return;
+    }
+    if (isForbiddenDemoPassword(newPassword)) {
+      res.status(400).json({ error: 'No se permiten contraseñas de demostración conocidas.' });
+      return;
+    }
+    const db = store.getDb();
+    const target = db.users.find((u) => u.id === req.params.id);
+    if (!target) {
+      res.status(404).json({ error: 'Usuario no encontrado.' });
+      return;
+    }
+    target.passwordHash = hashPassword(newPassword);
+    if (reactivate && target.status === 'bloqueada') {
+      target.status = 'activa';
+    }
+    store.addAudit(
+      'users',
+      target.id,
+      'RESTABLECER_CONTRASENA',
+      `Contraseña restablecida por el dueño para ${target.name}${reactivate ? ' (cuenta reactivada)' : ''}`,
+      req.user!.sub,
+      req.user!.name
+    );
+    store.persist();
+    closeUserSockets(target.id, undefined, 'Credenciales actualizadas por el dueño');
+    broadcastEvent('sync:state_updated', { entity: 'users' });
+    res.json({ ok: true, status: target.status });
+  });
+
   // Full dashboard state for Owner Windows app
   app.get('/api/dashboard/state', requireAuth, requireRole('dueno'), (_req, res) => {
     res.json(store.getState());
   });
 
-  // Vendors management: Approve, Block, Authorize single device
+  // Vendors management: Approve, Block, Authorize / Revoke single device
   app.post('/api/vendors/:id/approve', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de vendedor inválido.' });
+      return;
+    }
     const db = store.getDb();
     const vendor = db.users.find((u) => u.id === req.params.id && u.role === 'vendedor');
     if (!vendor) {
@@ -383,6 +693,10 @@ async function bootstrap() {
     }
 
     const requestedSeries = sanitizePlainText(req.body?.folioSeries, 4).toUpperCase();
+    if (requestedSeries && !isValidFolioSeries(requestedSeries)) {
+      res.status(400).json({ error: 'La serie de folios debe contener entre 1 y 4 letras mayúsculas.' });
+      return;
+    }
     const series = vendor.folioSeries || requestedSeries || store.nextSeriesLetter();
 
     const seriesConflict = db.users.find(
@@ -421,6 +735,10 @@ async function bootstrap() {
   });
 
   app.post('/api/vendors/:id/block', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de vendedor inválido.' });
+      return;
+    }
     const db = store.getDb();
     const vendor = db.users.find((u) => u.id === req.params.id && u.role === 'vendedor');
     if (!vendor) {
@@ -443,6 +761,7 @@ async function bootstrap() {
       req.user!.name
     );
     store.persist();
+    closeUserSockets(vendor.id, undefined, 'Cuenta bloqueada por el dueño');
     broadcastEvent('vendor:updated', { vendorId: vendor.id, status: 'bloqueada' });
     res.json({ ok: true });
   });
@@ -457,8 +776,8 @@ async function bootstrap() {
 
     const deviceId = sanitizePlainText(req.body?.deviceId, 80);
     const deviceName = sanitizePlainText(req.body?.deviceName, 100) || 'Android';
-    if (!deviceId) {
-      res.status(400).json({ error: 'El identificador del dispositivo es obligatorio.' });
+    if (!isValidEntityId(deviceId)) {
+      res.status(400).json({ error: 'El identificador del dispositivo es obligatorio y debe ser válido.' });
       return;
     }
 
@@ -500,6 +819,10 @@ async function bootstrap() {
   });
 
   app.post('/api/devices/:id/authorize', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de dispositivo inválido.' });
+      return;
+    }
     const db = store.getDb();
     const target = db.devices.find((d) => d.id === req.params.id);
     if (!target) {
@@ -507,10 +830,14 @@ async function bootstrap() {
       return;
     }
 
-    // Rule: Only 1 active device per vendor account
+    // Rule: Only 1 active device per vendor account; close WebSockets on revoked devices
+    const revokedIds: string[] = [];
     db.devices
       .filter((d) => d.userId === target.userId)
       .forEach((d) => {
+        if (d.id !== target.id && d.active) {
+          revokedIds.push(d.id);
+        }
         d.active = d.id === target.id;
       });
 
@@ -523,7 +850,36 @@ async function bootstrap() {
       req.user!.name
     );
     store.persist();
+    for (const revId of revokedIds) {
+      closeUserSockets(target.userId, revId, 'Dispositivo reemplazado por otro equipo autorizado');
+    }
     broadcastEvent('device:authorized', { userId: target.userId, deviceId: target.id }, target.userId);
+    broadcastEvent('sync:state_updated', { entity: 'devices' }, target.userId);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/devices/:id/revoke', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de dispositivo inválido.' });
+      return;
+    }
+    const db = store.getDb();
+    const target = db.devices.find((d) => d.id === req.params.id);
+    if (!target) {
+      res.status(404).json({ error: 'Dispositivo no encontrado.' });
+      return;
+    }
+    target.active = false;
+    store.addAudit(
+      'devices',
+      target.id,
+      'REVOCAR_DISPOSITIVO',
+      `Dispositivo revocado: ${target.deviceName}`,
+      req.user!.sub,
+      req.user!.name
+    );
+    store.persist();
+    closeUserSockets(target.userId, target.id, 'Dispositivo revocado por el dueño');
     broadcastEvent('sync:state_updated', { entity: 'devices' }, target.userId);
     res.json({ ok: true });
   });
@@ -531,8 +887,13 @@ async function bootstrap() {
   // Daily Price
   app.post('/api/prices', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const pricePesos = Number(req.body?.pricePesosPerKg);
-    const dateYmd = sanitizePlainText(req.body?.dateYmd, 10) || getMexicoCityYmd();
+    const rawDate = sanitizePlainText(req.body?.dateYmd, 10);
+    const dateYmd = rawDate || getMexicoCityYmd();
 
+    if (!isValidYmd(dateYmd)) {
+      res.status(400).json({ error: 'La fecha debe tener formato válido YYYY-MM-DD.' });
+      return;
+    }
     if (!Number.isFinite(pricePesos) || pricePesos <= 0 || pricePesos > 500) {
       res.status(400).json({ error: 'El precio por kilo debe ser mayor a $0.' });
       return;
@@ -565,6 +926,10 @@ async function bootstrap() {
   });
 
   app.post('/api/prices/:id/review', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de precio inválido.' });
+      return;
+    }
     const db = store.getDb();
     const price = db.dailyPrices.find((p) => p.id === req.params.id);
     if (!price) {
@@ -587,6 +952,10 @@ async function bootstrap() {
 
   // Deliveries: Cancel with reason & Reprint log
   app.post('/api/deliveries/:id/cancel', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de entrega inválido.' });
+      return;
+    }
     const reason = sanitizePlainText(req.body?.reason, 200);
     if (reason.length < 4) {
       res.status(400).json({ error: 'El motivo de cancelación es obligatorio (mínimo 4 caracteres).' });
@@ -636,6 +1005,10 @@ async function bootstrap() {
   });
 
   app.post('/api/deliveries/:id/reprint', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de entrega inválido.' });
+      return;
+    }
     const db = store.getDb();
     const delivery = db.deliveries.find((d) => d.id === req.params.id);
     if (!delivery) {
@@ -662,6 +1035,10 @@ async function bootstrap() {
 
   // Verify bank transfer payment
   app.post('/api/payments/:id/verify', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de pago inválido.' });
+      return;
+    }
     const db = store.getDb();
     const payment = db.payments.find((p) => p.id === req.params.id);
     if (!payment) {
@@ -770,6 +1147,10 @@ async function bootstrap() {
   });
 
   app.patch('/api/customers/:id', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de cliente inválido.' });
+      return;
+    }
     const db = store.getDb();
     const customer = db.customers.find(
       (c) => c.id === req.params.id && !c.mergedIntoCustomerId
@@ -842,6 +1223,10 @@ async function bootstrap() {
   });
 
   app.post('/api/customers/:id/payments', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de cliente inválido.' });
+      return;
+    }
     const db = store.getDb();
     const customer = db.customers.find(
       (c) => c.id === req.params.id && !c.mergedIntoCustomerId
@@ -912,8 +1297,8 @@ async function bootstrap() {
     const primaryId = sanitizePlainText(req.body?.primaryId, 80);
     const duplicateId = sanitizePlainText(req.body?.duplicateId, 80);
 
-    if (!primaryId || !duplicateId || primaryId === duplicateId) {
-      res.status(400).json({ error: 'Seleccione dos clientes distintos para unir.' });
+    if (!isValidEntityId(primaryId) || !isValidEntityId(duplicateId) || primaryId === duplicateId) {
+      res.status(400).json({ error: 'Seleccione dos clientes distintos válidos para unir.' });
       return;
     }
 
@@ -964,6 +1349,10 @@ async function bootstrap() {
 
   // Money Incidents: Review
   app.post('/api/incidents/:id/review', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    if (!isValidEntityId(req.params.id)) {
+      res.status(400).json({ error: 'Identificador de incidente inválido.' });
+      return;
+    }
     const ownerNote = sanitizePlainText(req.body?.ownerNote, 240);
     const db = store.getDb();
     const incident = db.moneyIncidents.find((i) => i.id === req.params.id);
@@ -990,14 +1379,19 @@ async function bootstrap() {
   // Cash Closing (Cierre general / por vendedor)
   app.post('/api/closings', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
     const vendorId = sanitizePlainText(req.body?.vendorId, 80);
-    const dateYmd = sanitizePlainText(req.body?.dateYmd, 10) || getMexicoCityYmd();
+    const rawDate = sanitizePlainText(req.body?.dateYmd, 10);
+    const dateYmd = rawDate || getMexicoCityYmd();
     const rawActualCash = req.body?.actualCashPesos;
     const actualCashPesos =
       rawActualCash === '' || rawActualCash === null || rawActualCash === undefined
         ? NaN
         : Number(rawActualCash);
 
-    if (!vendorId || !Number.isFinite(actualCashPesos) || actualCashPesos < 0 || actualCashPesos > 100_000_000) {
+    if (!isValidYmd(dateYmd)) {
+      res.status(400).json({ error: 'La fecha de cierre debe tener formato YYYY-MM-DD válido.' });
+      return;
+    }
+    if (!isValidEntityId(vendorId) || !Number.isFinite(actualCashPesos) || actualCashPesos < 0 || actualCashPesos > 100_000_000) {
       res.status(400).json({ error: 'Vendedor y efectivo recibido válido son requeridos.' });
       return;
     }
@@ -1198,6 +1592,70 @@ async function bootstrap() {
     store.acknowledgeAlert(alertId);
     broadcastEvent('alert:acknowledged', { alertId });
     res.json({ ok: true });
+  });
+
+  // Encrypted & Verified SQLite Backups (Owner only)
+  app.get('/api/backups', requireAuth, requireRole('dueno'), (_req, res) => {
+    res.json({ backups: store.listBackups() });
+  });
+
+  app.post('/api/backups/create', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    try {
+      const backup = store.createEncryptedBackup('manual');
+      store.addAudit(
+        'backups',
+        backup.fileName,
+        'CREAR_RESPALDO_CIFRADO',
+        `Respaldo cifrado AES-256-GCM verificado: ${backup.fileName} (${backup.counts.deliveries} entregas, ${backup.counts.customers} clientes)`,
+        req.user!.sub,
+        req.user!.name
+      );
+      store.persist();
+      res.status(201).json(backup);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/backups/verify', requireAuth, requireRole('dueno'), (req, res) => {
+    try {
+      let envelope = typeof req.body?.envelope === 'string' ? req.body.envelope : '';
+      if (!envelope && typeof req.body?.fileName === 'string') {
+        envelope = store.readEncryptedBackupFile(req.body.fileName);
+      }
+      const verified = store.verifyEncryptedBackupEnvelope(envelope);
+      res.json({
+        valid: true,
+        createdAtUtc: verified.createdAtUtc,
+        sha256: verified.sha256,
+        counts: verified.counts,
+      });
+    } catch (err) {
+      res.status(400).json({ valid: false, error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/backups/restore', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
+    try {
+      let envelope = typeof req.body?.envelope === 'string' ? req.body.envelope : '';
+      if (!envelope && typeof req.body?.fileName === 'string') {
+        envelope = store.readEncryptedBackupFile(req.body.fileName);
+      }
+      const result = store.restoreFromEncryptedBackupEnvelope(envelope);
+      store.addAudit(
+        'backups',
+        result.safetyBackupFileName,
+        'RESTAURAR_RESPALDO_CIFRADO',
+        `Base SQLite restaurada desde respaldo verificado (copia previa: ${result.safetyBackupFileName})`,
+        req.user!.sub,
+        req.user!.name
+      );
+      store.persist();
+      broadcastEvent('sync:state_updated', { entity: 'restore' });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
   });
 
   // Bodega: Register Farm -> Warehouse Torton / Trailer Arrival (Eggs & Sugar Sacks)
@@ -2285,6 +2743,9 @@ async function bootstrap() {
         if (alreadyPaid + amountCentavos > linkedDel.totalToChargeCentavos) continue;
       }
 
+      const rawPayCreated = sanitizePlainText(rawPay.createdAtUtc, 40);
+      const safePayCreatedUtc =
+        rawPayCreated && isValidIsoUtc(rawPayCreated) ? rawPayCreated : nowUtc;
       db.payments.push({
         id: payId,
         customerId,
@@ -2293,7 +2754,7 @@ async function bootstrap() {
         amountCentavos,
         method,
         status: method === 'efectivo' ? 'verificado' : 'por_verificar',
-        createdAtUtc: sanitizePlainText(rawPay.createdAtUtc, 40) || nowUtc,
+        createdAtUtc: safePayCreatedUtc,
         note: sanitizePlainText(rawPay.note, 160) || 'Cobro en ruta Android',
       });
       acceptedPaymentIds.push(payId);
@@ -2377,7 +2838,7 @@ async function bootstrap() {
     });
   });
 
-  app.get('/api/sync/pull', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.get('/api/sync/pull', syncLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
     const todayYmd = getMexicoCityYmd();
     const latestPrice = db.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? db.dailyPrices[0];
@@ -2392,8 +2853,12 @@ async function bootstrap() {
     }
 
     let deviceAuthorized = true;
-    const queryDeviceId = sanitizePlainText(req.query.deviceId, 80);
-    if (user.role === 'vendedor' && queryDeviceId) {
+    const queryDeviceId = sanitizePlainText(req.query.deviceId ?? req.headers['x-device-id'], 80);
+    if (user.role === 'vendedor') {
+      if (!queryDeviceId || !isValidEntityId(queryDeviceId)) {
+        res.status(400).json({ error: 'El identificador del dispositivo es obligatorio para sincronizar.' });
+        return;
+      }
       const device = db.devices.find((d) => d.id === queryDeviceId && d.userId === user.id);
       if (!device || !device.active) {
         deviceAuthorized = false;

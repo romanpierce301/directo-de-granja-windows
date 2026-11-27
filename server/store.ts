@@ -31,7 +31,14 @@ import {
   type WarehouseShipmentLine,
   type Workday,
 } from '../shared/domain.ts';
-import { hashPassword, verifyPassword, encryptField, decryptField } from './security.ts';
+import {
+  hashPassword,
+  isLegacyDemoPasswordHash,
+  encryptField,
+  decryptField,
+  encryptSensitive,
+  decryptSensitive,
+} from './security.ts';
 
 export interface LedgerDatabase {
   users: UserAccount[];
@@ -141,20 +148,94 @@ export class LedgerStore {
     const settingsCountRow = this.sqlite
       .prepare('SELECT COUNT(*) AS cnt FROM app_settings WHERE id = 1')
       .get() as { cnt: number };
+    const existingUsersRow = this.sqlite
+      .prepare('SELECT COUNT(*) AS cnt FROM users')
+      .get() as { cnt: number };
+    const existingCustomersRow = this.sqlite
+      .prepare('SELECT COUNT(*) AS cnt FROM customers')
+      .get() as { cnt: number };
+    const existingDeliveriesRow = this.sqlite
+      .prepare('SELECT COUNT(*) AS cnt FROM deliveries')
+      .get() as { cnt: number };
 
-    if (settingsCountRow.cnt === 0) {
+    const sqliteIsEmpty =
+      settingsCountRow.cnt === 0 &&
+      existingUsersRow.cnt === 0 &&
+      existingCustomersRow.cnt === 0 &&
+      existingDeliveriesRow.cnt === 0;
+
+    if (sqliteIsEmpty) {
       if (dbPath === DEFAULT_SQLITE_FILE && fs.existsSync(LEGACY_JSON_FILE)) {
         try {
           const raw = fs.readFileSync(LEGACY_JSON_FILE, 'utf8');
           const parsed = JSON.parse(raw) as LedgerDatabase;
+          if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            !Array.isArray(parsed.users) ||
+            !Array.isArray(parsed.customers) ||
+            !parsed.settings ||
+            typeof parsed.settings !== 'object'
+          ) {
+            throw new Error('Estructura JSON heredada inválida.');
+          }
+          // Respaldo cifrado preventivo antes de migrar JSON -> SQLite
+          const preMigFile = path.join(BACKUPS_DIR, `pre-migration-${Date.now()}.dgbackup`);
+          fs.writeFileSync(preMigFile, encryptSensitive(raw), { encoding: 'utf8', mode: 0o600 });
+
+          parsed.devices ??= [];
+          parsed.crewMembers ??= [];
+          parsed.workdays ??= [];
+          parsed.dailyPrices ??= [];
+          parsed.deliveries ??= [];
+          parsed.deliveryBoxes ??= [];
+          parsed.dailyLosses ??= [];
+          parsed.payments ??= [];
+          parsed.moneyIncidents ??= [];
+          parsed.deliveryEvents ??= [];
+          parsed.cashClosings ??= [];
+          parsed.auditLog ??= [];
+          parsed.excelImports ??= [];
           parsed.warehouseShipments ??= [];
+          parsed.acknowledgedAlertIds ??= [];
           parsed.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 };
           parsed.settings.nextFolioBySeries.BD ??= 1;
           parsed.settings.nextFolioBySeries.E ??= 1;
+
+          // Bloquear cuentas demo heredadas durante la migración
+          const blockedDemoIds = new Set<string>();
+          parsed.users = parsed.users.map((u) => {
+            if (isLegacyDemoPasswordHash(u.passwordHash)) {
+              blockedDemoIds.add(u.id);
+              return { ...u, status: 'bloqueada' as const };
+            }
+            return u;
+          });
+          if (blockedDemoIds.size > 0) {
+            parsed.devices = parsed.devices.map((d) =>
+              blockedDemoIds.has(d.userId) ? { ...d, active: false } : d
+            );
+          }
+
           this.db = parsed;
           this.persist();
+
+          // Verificar conteos en SQLite antes de marcar JSON como migrado
+          const migratedCustomers = (
+            this.sqlite.prepare('SELECT COUNT(*) AS cnt FROM customers').get() as { cnt: number }
+          ).cnt;
+          const migratedDeliveries = (
+            this.sqlite.prepare('SELECT COUNT(*) AS cnt FROM deliveries').get() as { cnt: number }
+          ).cnt;
+          if (
+            migratedCustomers !== parsed.customers.length ||
+            migratedDeliveries !== parsed.deliveries.length
+          ) {
+            throw new Error('Verificación post-migración falló.');
+          }
           fs.renameSync(LEGACY_JSON_FILE, `${LEGACY_JSON_FILE}.migrated`);
-        } catch {
+        } catch (err) {
+          console.error('Error al migrar JSON heredado a SQLite (sin sobrescribir JSON):', err);
           this.db = createSeedDatabase();
           this.persist();
         }
@@ -163,7 +244,11 @@ export class LedgerStore {
         this.persist();
       }
     } else {
-      this.db = this.loadFromSqlite();
+      const { db, needsMigration } = this.loadFromSqliteWithMigrationCheck();
+      this.db = db;
+      if (needsMigration) {
+        this.persist();
+      }
     }
   }
 
@@ -450,12 +535,25 @@ export class LedgerStore {
   }
 
   private loadFromSqlite(): LedgerDatabase {
+    return this.loadFromSqliteWithMigrationCheck().db;
+  }
+
+  private loadFromSqliteWithMigrationCheck(): { db: LedgerDatabase; needsMigration: boolean } {
+    let needsMigration = false;
+    const isPlaintextSensitive = (raw: unknown): boolean =>
+      typeof raw === 'string' && raw.length > 0 && !raw.startsWith('enc:');
+
+    const blockedDemoUserIds = new Set<string>();
     const users = (this.sqlite.prepare('SELECT * FROM users ORDER BY sort_order ASC').all() as any[]).map(
       (r) => {
         let status = r.status;
         const pHash = r.password_hash;
-        if (pHash && (verifyPassword('Granja2026!', pHash) || verifyPassword('Vendedor2026!', pHash))) {
+        if (isLegacyDemoPasswordHash(pHash)) {
+          if (status !== 'bloqueada') {
+            needsMigration = true;
+          }
           status = 'bloqueada';
+          blockedDemoUserIds.add(r.id);
         }
         return {
           id: r.id,
@@ -471,14 +569,21 @@ export class LedgerStore {
     ) as UserAccount[];
 
     const devices = (this.sqlite.prepare('SELECT * FROM devices ORDER BY sort_order ASC').all() as any[]).map(
-      (r) => ({
-        id: r.id,
-        userId: r.user_id,
-        deviceName: r.device_name,
-        active: Boolean(r.active),
-        lastSyncUtc: r.last_sync_utc ?? null,
-        pendingSyncCount: r.pending_sync_count,
-      })
+      (r) => {
+        let active = Boolean(r.active);
+        if (blockedDemoUserIds.has(r.user_id) && active) {
+          active = false;
+          needsMigration = true;
+        }
+        return {
+          id: r.id,
+          userId: r.user_id,
+          deviceName: r.device_name,
+          active,
+          lastSyncUtc: r.last_sync_utc ?? null,
+          pendingSyncCount: r.pending_sync_count,
+        };
+      }
     ) as AuthorizedDevice[];
 
     const crewMembers = (
@@ -502,20 +607,30 @@ export class LedgerStore {
     ) as Workday[];
 
     const customers = (this.sqlite.prepare('SELECT * FROM customers ORDER BY sort_order ASC').all() as any[]).map(
-      (r) => ({
-        id: r.id,
-        businessName: r.business_name,
-        contactName: decryptField(r.contact_name),
-        phone: decryptField(r.phone),
-        address: decryptField(r.address),
-        notes: decryptField(r.notes),
-        active: Boolean(r.active),
-        createdByUserId: r.created_by_user_id,
-        mergedIntoCustomerId: r.merged_into_customer_id ?? null,
-        createdAtUtc: r.created_at_utc,
-        specialPriceCentavosPerKg: r.special_price_centavos_per_kg ?? null,
-        creditTermDays: r.credit_term_days ?? null,
-      })
+      (r) => {
+        if (
+          isPlaintextSensitive(r.contact_name) ||
+          isPlaintextSensitive(r.phone) ||
+          isPlaintextSensitive(r.address) ||
+          isPlaintextSensitive(r.notes)
+        ) {
+          needsMigration = true;
+        }
+        return {
+          id: r.id,
+          businessName: r.business_name,
+          contactName: decryptField(r.contact_name),
+          phone: decryptField(r.phone),
+          address: decryptField(r.address),
+          notes: decryptField(r.notes),
+          active: Boolean(r.active),
+          createdByUserId: r.created_by_user_id,
+          mergedIntoCustomerId: r.merged_into_customer_id ?? null,
+          createdAtUtc: r.created_at_utc,
+          specialPriceCentavosPerKg: r.special_price_centavos_per_kg ?? null,
+          creditTermDays: r.credit_term_days ?? null,
+        };
+      }
     ) as Customer[];
 
     const dailyPrices = (
@@ -574,47 +689,58 @@ export class LedgerStore {
 
     const dailyLosses = (
       this.sqlite.prepare('SELECT * FROM daily_losses ORDER BY sort_order ASC').all() as any[]
-    ).map((r) => ({
-      id: r.id,
-      vendorId: r.vendor_id,
-      vendorName: r.vendor_name,
-      workdayId: r.workday_id,
-      dateYmd: r.date_ymd,
-      lostGrams: r.lost_grams,
-      note: r.note,
-      createdAtUtc: r.created_at_utc,
-    })) as DailyLoss[];
+    ).map((r) => {
+      if (isPlaintextSensitive(r.note)) needsMigration = true;
+      return {
+        id: r.id,
+        vendorId: r.vendor_id,
+        vendorName: r.vendor_name,
+        workdayId: r.workday_id,
+        dateYmd: r.date_ymd,
+        lostGrams: r.lost_grams,
+        note: decryptField(r.note),
+        createdAtUtc: r.created_at_utc,
+      };
+    }) as DailyLoss[];
 
     const payments = (this.sqlite.prepare('SELECT * FROM payments ORDER BY sort_order ASC').all() as any[]).map(
-      (r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        deliveryId: r.delivery_id ?? null,
-        vendorId: r.vendor_id,
-        amountCentavos: r.amount_centavos,
-        method: r.method,
-        status: r.status,
-        createdAtUtc: r.created_at_utc,
-        note: r.note,
-      })
+      (r) => {
+        if (isPlaintextSensitive(r.note)) needsMigration = true;
+        return {
+          id: r.id,
+          customerId: r.customer_id,
+          deliveryId: r.delivery_id ?? null,
+          vendorId: r.vendor_id,
+          amountCentavos: r.amount_centavos,
+          method: r.method,
+          status: r.status,
+          createdAtUtc: r.created_at_utc,
+          note: decryptField(r.note),
+        };
+      }
     ) as Payment[];
 
     const moneyIncidents = (
       this.sqlite.prepare('SELECT * FROM money_incidents ORDER BY sort_order ASC').all() as any[]
-    ).map((r) => ({
-      id: r.id,
-      vendorId: r.vendor_id,
-      vendorName: r.vendor_name,
-      type: r.type,
-      amountCentavos: r.amount_centavos,
-      occurredAtUtc: r.occurred_at_utc,
-      relatedDeliveryId: r.related_delivery_id ?? null,
-      relatedCustomerId: r.related_customer_id ?? null,
-      description: r.description,
-      peoplePresent: safeJsonParse<string[]>(r.people_present_json, []),
-      status: r.status,
-      ownerNote: r.owner_note ?? null,
-    })) as MoneyIncident[];
+    ).map((r) => {
+      if (isPlaintextSensitive(r.description) || isPlaintextSensitive(r.owner_note)) {
+        needsMigration = true;
+      }
+      return {
+        id: r.id,
+        vendorId: r.vendor_id,
+        vendorName: r.vendor_name,
+        type: r.type,
+        amountCentavos: r.amount_centavos,
+        occurredAtUtc: r.occurred_at_utc,
+        relatedDeliveryId: r.related_delivery_id ?? null,
+        relatedCustomerId: r.related_customer_id ?? null,
+        description: decryptField(r.description),
+        peoplePresent: safeJsonParse<string[]>(r.people_present_json, []),
+        status: r.status,
+        ownerNote: r.owner_note ? decryptField(r.owner_note) : null,
+      };
+    }) as MoneyIncident[];
 
     const deliveryEvents = (
       this.sqlite.prepare('SELECT * FROM delivery_events ORDER BY sort_order ASC').all() as any[]
@@ -700,32 +826,43 @@ export class LedgerStore {
 
     const warehouseShipments = (
       this.sqlite.prepare('SELECT * FROM warehouse_shipments ORDER BY sort_order ASC').all() as any[]
-    ).map((r) => ({
-      id: r.id,
-      series: r.series,
-      folioNumber: r.folio_number,
-      folioFormatted: r.folio_formatted,
-      vehicleType: r.vehicle_type,
-      referenceCode: r.reference_code,
-      originFarm: r.origin_farm,
-      driverName: r.driver_name,
-      arrivedAtUtc: r.arrived_at_utc,
-      registeredByUserId: r.registered_by_user_id,
-      registeredByName: r.registered_by_name,
-      notes: r.notes,
-      lines: linesByShipment.get(r.id) ?? [],
-    })) as WarehouseShipment[];
+    ).map((r) => {
+      if (isPlaintextSensitive(r.notes)) needsMigration = true;
+      return {
+        id: r.id,
+        series: r.series,
+        folioNumber: r.folio_number,
+        folioFormatted: r.folio_formatted,
+        vehicleType: r.vehicle_type,
+        referenceCode: r.reference_code,
+        originFarm: r.origin_farm,
+        driverName: r.driver_name,
+        arrivedAtUtc: r.arrived_at_utc,
+        registeredByUserId: r.registered_by_user_id,
+        registeredByName: r.registered_by_name,
+        notes: decryptField(r.notes),
+        lines: linesByShipment.get(r.id) ?? [],
+      };
+    }) as WarehouseShipment[];
 
     const settingsRow = this.sqlite
       .prepare('SELECT * FROM app_settings WHERE id = 1')
       .get() as any;
 
+    if (
+      settingsRow &&
+      (isPlaintextSensitive(settingsRow.business_phone) ||
+        isPlaintextSensitive(settingsRow.business_address))
+    ) {
+      needsMigration = true;
+    }
+
     const settings: AppSettings = settingsRow
       ? {
           businessName: settingsRow.business_name,
           slogan: settingsRow.slogan,
-          businessPhone: settingsRow.business_phone,
-          businessAddress: settingsRow.business_address,
+          businessPhone: decryptField(settingsRow.business_phone),
+          businessAddress: decryptField(settingsRow.business_address),
           profilePictureUrl: settingsRow.profile_picture_url ?? '',
           reduceAnimations: Boolean(settingsRow.reduce_animations),
           themeMode: settingsRow.theme_mode === 'light' ? 'light' : 'dark',
@@ -746,24 +883,27 @@ export class LedgerStore {
     ).map((r) => r.alert_id);
 
     return {
-      users,
-      devices,
-      crewMembers,
-      workdays,
-      customers,
-      dailyPrices,
-      deliveries,
-      deliveryBoxes,
-      dailyLosses,
-      payments,
-      moneyIncidents,
-      deliveryEvents,
-      cashClosings,
-      auditLog,
-      excelImports,
-      warehouseShipments,
-      settings,
-      acknowledgedAlertIds,
+      db: {
+        users,
+        devices,
+        crewMembers,
+        workdays,
+        customers,
+        dailyPrices,
+        deliveries,
+        deliveryBoxes,
+        dailyLosses,
+        payments,
+        moneyIncidents,
+        deliveryEvents,
+        cashClosings,
+        auditLog,
+        excelImports,
+        warehouseShipments,
+        settings,
+        acknowledgedAlertIds,
+      },
+      needsMigration,
     };
   }
 
@@ -925,7 +1065,17 @@ export class LedgerStore {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       data.dailyLosses.forEach((l, i) =>
-        insLoss.run(l.id, i, l.vendorId, l.vendorName, l.workdayId, l.dateYmd, l.lostGrams, l.note, l.createdAtUtc)
+        insLoss.run(
+          l.id,
+          i,
+          l.vendorId,
+          l.vendorName,
+          l.workdayId,
+          l.dateYmd,
+          l.lostGrams,
+          encryptField(l.note),
+          l.createdAtUtc
+        )
       );
 
       const insPay = this.sqlite.prepare(`
@@ -943,7 +1093,7 @@ export class LedgerStore {
           p.method,
           p.status,
           p.createdAtUtc,
-          p.note
+          encryptField(p.note)
         )
       );
 
@@ -962,10 +1112,10 @@ export class LedgerStore {
           inc.occurredAtUtc,
           inc.relatedDeliveryId ?? null,
           inc.relatedCustomerId ?? null,
-          inc.description,
+          encryptField(inc.description),
           JSON.stringify(inc.peoplePresent ?? []),
           inc.status,
-          inc.ownerNote ?? null
+          inc.ownerNote ? encryptField(inc.ownerNote) : null
         )
       );
 
@@ -1067,7 +1217,7 @@ export class LedgerStore {
           s.arrivedAtUtc,
           s.registeredByUserId,
           s.registeredByName,
-          s.notes
+          encryptField(s.notes)
         );
         (s.lines ?? []).forEach((l) => {
           insLine.run(
@@ -1100,8 +1250,8 @@ export class LedgerStore {
         .run(
           data.settings.businessName,
           data.settings.slogan,
-          data.settings.businessPhone,
-          data.settings.businessAddress,
+          encryptField(data.settings.businessPhone),
+          encryptField(data.settings.businessAddress),
           data.settings.profilePictureUrl ?? '',
           data.settings.reduceAnimations ? 1 : 0,
           data.settings.themeMode,
@@ -1138,6 +1288,171 @@ export class LedgerStore {
 
   public close(): void {
     this.sqlite.close();
+  }
+
+  public resolveSafeBackupFile(fileName: string): string {
+    const clean = path.basename(fileName);
+    if (!/^[a-zA-Z0-9._-]{1,120}\.dgbackup$/.test(clean)) {
+      throw new Error('Nombre de archivo de respaldo inválido.');
+    }
+    const resolved = path.resolve(BACKUPS_DIR, clean);
+    if (!resolved.startsWith(BACKUPS_DIR + path.sep)) {
+      throw new Error('Ruta de respaldo fuera del directorio permitido.');
+    }
+    return resolved;
+  }
+
+  public readEncryptedBackupFile(fileName: string): string {
+    const safePath = this.resolveSafeBackupFile(fileName);
+    if (!fs.existsSync(safePath)) {
+      throw new Error('Archivo de respaldo no encontrado.');
+    }
+    return fs.readFileSync(safePath, 'utf8');
+  }
+
+  public listBackups(): { fileName: string; sizeBytes: number; createdAtUtc: string }[] {
+    if (!fs.existsSync(BACKUPS_DIR)) return [];
+    return fs
+      .readdirSync(BACKUPS_DIR)
+      .filter((f) => f.endsWith('.dgbackup'))
+      .map((f) => {
+        const full = path.join(BACKUPS_DIR, f);
+        const st = fs.statSync(full);
+        return {
+          fileName: f,
+          sizeBytes: st.size,
+          createdAtUtc: st.mtime.toISOString(),
+        };
+      })
+      .sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
+  }
+
+  public createEncryptedBackup(prefix = 'backup'): {
+    fileName: string;
+    envelope: string;
+    sha256: string;
+    counts: { users: number; customers: number; deliveries: number; shipments: number };
+  } {
+    const payloadJson = JSON.stringify(this.db);
+    const sha256 = crypto.createHash('sha256').update(payloadJson).digest('hex');
+    const wrapper = JSON.stringify({
+      format: 'directo-de-granja-backup-v1',
+      createdAtUtc: new Date().toISOString(),
+      sha256,
+      data: this.db,
+    });
+    const envelope = encryptSensitive(wrapper);
+    const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '') || 'backup';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${safePrefix}-${stamp}.dgbackup`;
+    const filePath = this.resolveSafeBackupFile(fileName);
+    fs.writeFileSync(filePath, envelope, { encoding: 'utf8', mode: 0o600 });
+
+    // Verificar inmediatamente que el respaldo escrito pueda descifrarse y restaurarse
+    this.verifyEncryptedBackupEnvelope(envelope);
+
+    return {
+      fileName,
+      envelope,
+      sha256,
+      counts: {
+        users: this.db.users.length,
+        customers: this.db.customers.length,
+        deliveries: this.db.deliveries.length,
+        shipments: this.db.warehouseShipments.length,
+      },
+    };
+  }
+
+  public verifyEncryptedBackupEnvelope(envelope: string): {
+    valid: true;
+    createdAtUtc: string;
+    sha256: string;
+    counts: { users: number; customers: number; deliveries: number; shipments: number };
+    parsedDb: LedgerDatabase;
+  } {
+    if (typeof envelope !== 'string' || !envelope.includes(':')) {
+      throw new Error('Formato de respaldo cifrado inválido.');
+    }
+    const decrypted = decryptSensitive(envelope.trim());
+    const parsedWrapper = JSON.parse(decrypted) as {
+      format?: string;
+      createdAtUtc?: string;
+      sha256?: string;
+      data?: LedgerDatabase;
+    };
+    if (
+      parsedWrapper.format !== 'directo-de-granja-backup-v1' ||
+      !parsedWrapper.data ||
+      !Array.isArray(parsedWrapper.data.users) ||
+      !Array.isArray(parsedWrapper.data.customers) ||
+      !Array.isArray(parsedWrapper.data.deliveries) ||
+      !parsedWrapper.data.settings
+    ) {
+      throw new Error('El contenido del respaldo no corresponde a Directo de Granja.');
+    }
+    const actualSha = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(parsedWrapper.data))
+      .digest('hex');
+    if (parsedWrapper.sha256 !== actualSha) {
+      throw new Error('La verificación de integridad (SHA-256) del respaldo falló.');
+    }
+    return {
+      valid: true,
+      createdAtUtc: parsedWrapper.createdAtUtc ?? '',
+      sha256: actualSha,
+      counts: {
+        users: parsedWrapper.data.users.length,
+        customers: parsedWrapper.data.customers.length,
+        deliveries: parsedWrapper.data.deliveries.length,
+        shipments: (parsedWrapper.data.warehouseShipments ?? []).length,
+      },
+      parsedDb: parsedWrapper.data,
+    };
+  }
+
+  public restoreFromEncryptedBackupEnvelope(envelope: string): {
+    restoredCounts: { users: number; customers: number; deliveries: number; shipments: number };
+    safetyBackupFileName: string;
+  } {
+    const verified = this.verifyEncryptedBackupEnvelope(envelope);
+    // Respaldo preventivo automático antes de restaurar
+    const safety = this.createEncryptedBackup('pre-restore');
+
+    const restored = verified.parsedDb;
+    restored.devices ??= [];
+    restored.warehouseShipments ??= [];
+    restored.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 };
+
+    // Asegurar que cuentas demo heredadas queden bloqueadas también tras restaurar
+    const blockedIds = new Set<string>();
+    restored.users = restored.users.map((u) => {
+      if (isLegacyDemoPasswordHash(u.passwordHash)) {
+        blockedIds.add(u.id);
+        return { ...u, status: 'bloqueada' as const };
+      }
+      return u;
+    });
+    if (blockedIds.size > 0) {
+      restored.devices = restored.devices.map((d) =>
+        blockedIds.has(d.userId) ? { ...d, active: false } : d
+      );
+    }
+
+    const previousDb = this.db;
+    try {
+      this.db = restored;
+      this.persist();
+    } catch (err) {
+      this.db = previousDb;
+      throw err;
+    }
+
+    return {
+      restoredCounts: verified.counts,
+      safetyBackupFileName: safety.fileName,
+    };
   }
 
   public getState(): Omit<LedgerDatabase, 'users'> & {

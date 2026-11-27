@@ -1,0 +1,80 @@
+name: Compilar Apps Windows (.exe) y Android (.apk)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  verify-backend-and-web:
+    name: Verificar Servidor y Pruebas de Seguridad
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar pruebas unitarias y de seguridad
+        run: npm test
+      - name: Verificar tipos y compilación web
+        run: |
+          npm run lint
+          npm run build
+
+  build-windows-exe:
+    name: Compilar Windows Dueño (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Ejecutar pruebas .NET
+        working-directory: dotnet-solution
+        run: |
+          dotnet restore HuevoControl.sln
+          dotnet test tests/HuevoControl.UnitTests/HuevoControl.UnitTests.csproj --configuration Release
+      - name: Publicar ejecutable único Windows (HuevoControl-Dueno.exe)
+        working-directory: dotnet-solution
+        run: |
+          dotnet publish src/Desktop/HuevoControl.WindowsApp/HuevoControl.WindowsApp.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o ./artifacts/win-x64
+      - name: Subir artefacto Windows (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DirectoDeGranja-Windows-x64
+          path: dotnet-solution/artifacts/win-x64/*.exe
+
+  build-android-apk:
+    name: Compilar Android Vendedor (Directo de Granja .apk)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Configurar Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Generar debug.keystore temporal de compilación
+        working-directory: directo-de-granja-android-beta
+        run: |
+          if [ ! -f debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+      - name: Compilar APK Directo de Granja (Debug)
+        working-directory: directo-de-granja-android-beta
+        run: gradle assembleDirectodegranjaDebug --no-daemon
+      - name: Subir artefacto Android (.apk)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DirectoDeGranja-Android-APK
+          path: directo-de-granja-android-beta/app/build/outputs/apk/directodegranja/debug/*.apk
