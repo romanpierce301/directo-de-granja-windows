@@ -35,6 +35,7 @@ import com.example.system.WindowsApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -312,22 +313,28 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
                 pendingAbonos.forEach { abono ->
                     val client = repository.getClientOnce(abono.clientId) ?: return@forEach
                     val windowsClientId = client.windowsId ?: return@forEach
-                    val linkedDelivery = repository.getDeliveryOnce(abono.deliveryId) ?: return@forEach
+                    val linkedDelivery = if (abono.deliveryId > 0L) {
+                        repository.getDeliveryOnce(abono.deliveryId) ?: return@forEach
+                    } else {
+                        null
+                    }
                     val abonoCentavos = BigDecimal.valueOf(abono.amountMxn)
                         .multiply(BigDecimal(100))
                         .setScale(0, RoundingMode.HALF_UP)
                         .toInt()
                     if (abonoCentavos > 0) {
-                        paymentsJson.put(
-                            JSONObject()
-                                .put("id", "pay-${abono.localId}")
-                                .put("customerId", windowsClientId)
-                                .put("deliveryId", linkedDelivery.localId)
-                                .put("amountCentavos", abonoCentavos)
-                                .put("method", "efectivo")
-                                .put("createdAtUtc", toUtcIso(abono.dateMillis))
-                                .put("note", abono.note.ifBlank { "Abono capturado en Android" }),
-                        )
+                        val payJson = JSONObject()
+                            .put("id", "pay-${abono.localId}")
+                            .put("customerId", windowsClientId)
+                            .put("deliveryId", linkedDelivery?.localId ?: JSONObject.NULL)
+                            .put("amountCentavos", abonoCentavos)
+                            .put("method", abono.paymentMethod.ifBlank { "efectivo" })
+                            .put("createdAtUtc", toUtcIso(abono.dateMillis))
+                            .put("note", abono.note.ifBlank { "Abono capturado en Android" })
+                        if (abono.receiptFolio.isNotBlank()) {
+                            payJson.put("receiptFolio", abono.receiptFolio)
+                        }
+                        paymentsJson.put(payJson)
                     }
                 }
                 val lossesJson = JSONArray()
@@ -463,7 +470,7 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
                     .filter {
                         !it.isCancelled &&
                             it.syncStatus != "RECIBIDA" &&
-                            deliveriesById[it.deliveryId]?.syncStatus == "RECIBIDA"
+                            (it.deliveryId <= 0L || deliveriesById[it.deliveryId]?.syncStatus == "RECIBIDA")
                     }
                     .fold(BigDecimal.ZERO) { acc, a -> acc.add(BigDecimal.valueOf(a.amountMxn)) }
                 windowsBase
@@ -680,10 +687,9 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var completed = false
             try {
-                val widthLabel = if (BuildConfig.FLAVOR == "directodegranja") "48 mm" else "60 mm"
                 _overlayState.value = OverlayState.Loading(
                     title = "Cargando ticket",
-                    message = "Preparando comprobante térmico de $widthLabel...",
+                    message = "Preparando comprobante térmico de 48 mm...",
                 )
                 delay(2200)
                 completed = true
@@ -1039,28 +1045,35 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun observeAbono(abonoId: Long): Flow<AbonoEntity?> = repository.observeAbonoById(abonoId)
+
     fun recordAbono(
         clientId: Long,
         deliveryId: Long,
         amountText: String,
         note: String,
-        onDone: () -> Unit = {},
+        paymentMethod: String = "efectivo",
+        onDone: (Long) -> Unit = {},
         isCremeria: Boolean = false,
     ) {
         viewModelScope.launch {
             runCatching {
                 val amount = CalculationEngine.parsePositiveDecimal(amountText).toDouble()
                 repository.recordAbono(
-                    clientId, deliveryId, amount, note,
-                    if (isCremeria) SalesChannel.CREMERIA else SalesChannel.PUBLIC,
+                    clientId = clientId,
+                    deliveryId = deliveryId,
+                    amountMxn = amount,
+                    note = note,
+                    salesChannel = if (isCremeria) SalesChannel.CREMERIA else SalesChannel.PUBLIC,
+                    paymentMethod = paymentMethod,
                 )
-            }.onSuccess {
+            }.onSuccess { abonoId ->
                 soundManager.playPaymentSuccessSound()
                 if (BuildConfig.FLAVOR == "directodegranja" && !isCremeria) {
                     viewModelScope.launch { syncDirectoData(silent = true) }
                 }
                 _feedbackMessage.value = "Abono registrado correctamente"
-                onDone()
+                onDone(abonoId)
             }.onFailure {
                 _feedbackMessage.value = it.message ?: "Error al registrar abono"
             }
@@ -1148,11 +1161,34 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Documentos, WhatsApp, Descargas e Impresión ---
-    fun printDeliveryTicket(delivery: DeliveryEntity) {
+    fun printDeliveryTicket(delivery: DeliveryEntity, isCopy: Boolean = false) {
         viewModelScope.launch {
             val currentSettings = repository.getSettingsOnce()
             val client = repository.getClientOnce(delivery.clientId)
-            printerManager.printDeliveryTicket(delivery, currentSettings, client)
+            val liveDebt = if (delivery.salesChannel == SalesChannel.CREMERIA) {
+                cremeriaClientsWithDebt.value.firstOrNull { it.client.id == delivery.clientId }?.activeDebtMxn
+            } else {
+                clientsWithDebt.value.firstOrNull { it.client.id == delivery.clientId }?.activeDebtMxn
+            }
+            printerManager.printDeliveryTicket(delivery, currentSettings, client, liveDebt, isCopy)
+                .onSuccess { msg -> _feedbackMessage.value = msg }
+                .onFailure { err -> _feedbackMessage.value = err.message ?: "Error de impresión" }
+        }
+    }
+
+    fun printAbonoTicket(abono: AbonoEntity, isCopy: Boolean = false) {
+        viewModelScope.launch {
+            val currentSettings = repository.getSettingsOnce()
+            val client = if (abono.clientId == SalesChannel.CREMERIA_CLIENT_ID) {
+                ClientEntity(
+                    id = SalesChannel.CREMERIA_CLIENT_ID,
+                    name = SalesChannel.CREMERIA_CLIENT_NAME,
+                    address = "",
+                )
+            } else {
+                repository.getClientOnce(abono.clientId)
+            }
+            printerManager.printAbonoTicket(abono, currentSettings, client, isCopy)
                 .onSuccess { msg -> _feedbackMessage.value = msg }
                 .onFailure { err -> _feedbackMessage.value = err.message ?: "Error de impresión" }
         }
@@ -1199,6 +1235,48 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun shareAbonoPdfWhatsApp(abono: AbonoEntity) {
+        viewModelScope.launch {
+            runCatching {
+                val pdfFile = repository.generateAbonoPdf(abono)
+                val uri = FileProvider.getUriForFile(
+                    app,
+                    "${BuildConfig.APPLICATION_ID}.fileprovider",
+                    pdfFile,
+                )
+                val folioLabel = abono.receiptFolio.ifBlank { "AB-${abono.id}" }
+                val waIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "Comprobante de Abono ${BuildConfig.BRAND_APP_NAME} • Folio $folioLabel",
+                    )
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    setPackage("com.whatsapp")
+                }
+                try {
+                    app.startActivity(waIntent)
+                } catch (_: ActivityNotFoundException) {
+                    val chooser = Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        },
+                        "Compartir comprobante de abono PDF",
+                    ).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    app.startActivity(chooser)
+                }
+            }.onFailure {
+                _feedbackMessage.value = "No se pudo compartir el PDF: ${it.message}"
+            }
+        }
+    }
+
     fun downloadDeliveryPdf(delivery: DeliveryEntity) {
         viewModelScope.launch {
             runCatching {
@@ -1207,6 +1285,18 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
                 saveOrRequestSaf(file, "application/pdf", file.name, BuildConfig.BRAND_TICKETS_FOLDER)
             }.onFailure {
                 _feedbackMessage.value = "Error al generar PDF: ${it.message}"
+            }
+        }
+    }
+
+    fun downloadAbonoPdf(abono: AbonoEntity) {
+        viewModelScope.launch {
+            runCatching {
+                repository.generateAbonoPdf(abono)
+            }.onSuccess { file ->
+                saveOrRequestSaf(file, "application/pdf", file.name, BuildConfig.BRAND_TICKETS_FOLDER)
+            }.onFailure {
+                _feedbackMessage.value = "Error al generar PDF de abono: ${it.message}"
             }
         }
     }
@@ -1370,7 +1460,14 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
             onDeviceFound = { found ->
                 _pairedPrinters.update { current ->
                     val previous = current.firstOrNull { it.type == found.type && it.address == found.address }
-                    val preferred = if (previous?.isLowEnergy == true && !found.isLowEnergy) previous else found
+                    val preferred = when {
+                        previous == null -> found
+                        previous.isPaired && !found.isPaired ->
+                            previous.copy(name = found.name.ifBlank { previous.name }, isLowEnergy = false)
+                        !previous.isLowEnergy && found.isLowEnergy -> previous
+                        previous.isLowEnergy && !found.isLowEnergy -> found
+                        else -> found
+                    }
                     (current.filterNot { it.type == found.type && it.address == found.address } + preferred)
                         .distinctBy { it.type to it.address }
                 }
@@ -1400,7 +1497,22 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectPrinter(device: PairedPrinterDevice) {
         viewModelScope.launch {
-            if (device.type != "BLUETOOTH" || device.isPaired || device.isLowEnergy) {
+            if (device.type == "USB") {
+                val permReq = printerManager.ensureUsbPermission(device.address) { permResult ->
+                    viewModelScope.launch {
+                        permResult.onSuccess {
+                            savePrinterSelection(device.copy(isPaired = true))
+                            refreshPrinters()
+                        }.onFailure {
+                            _feedbackMessage.value = it.message ?: "No se autorizó la impresora USB OTG"
+                        }
+                    }
+                }
+                permReq.onSuccess { _feedbackMessage.value = it }
+                    .onFailure { _feedbackMessage.value = it.message ?: "No se pudo abrir la impresora USB OTG" }
+                return@launch
+            }
+            if (device.isPaired || device.isLowEnergy) {
                 savePrinterSelection(device)
                 return@launch
             }
@@ -1408,7 +1520,7 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
             val request = printerManager.requestBluetoothPairing(device.address) { pairingResult ->
                 viewModelScope.launch {
                     pairingResult.onSuccess {
-                        savePrinterSelection(device.copy(isPaired = true))
+                        savePrinterSelection(device.copy(isPaired = true, isLowEnergy = false))
                         refreshPrinters()
                     }.onFailure {
                         _feedbackMessage.value = it.message ?: "No se pudo vincular la impresora"
@@ -1424,10 +1536,9 @@ class HyhViewModel(application: Application) : AndroidViewModel(application) {
         val transport = if (device.isLowEnergy) "BLE" else "CLASSIC"
         repository.updatePrinterSettings(device.type, device.name, device.address, transport)
         _feedbackMessage.value = when {
-            device.type == "USB" -> "Impresora USB seleccionada: ${device.name}"
+            device.type == "USB" -> "Impresora USB vinculada y lista: ${device.name}"
             device.isLowEnergy && !device.isPaired -> {
-                val widthLabel = if (BuildConfig.FLAVOR == "directodegranja") "48mm" else "60mm"
-                "Impresora Bluetooth LE seleccionada. Toca Prueba $widthLabel para conectarla."
+                "Impresora Bluetooth LE seleccionada. Toca Prueba 48mm para conectarla."
             }
             else -> "Impresora Bluetooth vinculada y seleccionada: ${device.name}"
         }

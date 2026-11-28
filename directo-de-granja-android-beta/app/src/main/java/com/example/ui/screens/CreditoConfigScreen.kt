@@ -150,7 +150,7 @@ fun CreditoConfigScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Card 1: Tiempo límite general y selección rápida
+            // Card 1: Tiempo límite general
             item {
                 AuroraCard {
                     Row(
@@ -179,34 +179,6 @@ fun CreditoConfigScreen(
                         color = OnSurfaceVariant,
                     )
                     Spacer(Modifier.height(10.dp))
-
-                    // Botones rápidos de plazo
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        listOf(3, 7, 15, 30).forEach { preset ->
-                            val selected = termDaysText.trim().toIntOrNull() == preset
-                            Surface(
-                                onClick = { termDaysText = preset.toString() },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (selected) Primary else SurfaceContainerLow,
-                                border = BorderStroke(1.dp, if (selected) Primary else OutlineVariant),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("credit_preset_${preset}_days"),
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "$preset d",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = if (selected) OnPrimary else OnSurface,
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     Spacer(Modifier.height(10.dp))
                     AuroraTextField(

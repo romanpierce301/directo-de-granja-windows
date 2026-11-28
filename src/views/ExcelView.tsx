@@ -48,14 +48,8 @@ export function ExcelView({ state, onRefresh, onNotify }: ExcelViewProps) {
   const [importing, setImporting] = useState(false);
 
   const downloadCustomerTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      {
-        'Nombre del negocio': 'Abarrotes Ejemplo',
-        Contacto: 'Encargado de tienda',
-        Teléfono: '5511223344',
-        Dirección: 'Calle Reforma 100',
-        Notas: 'Entrega matutina',
-      },
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Nombre del negocio', 'Contacto', 'Teléfono', 'Dirección', 'Notas'],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes');

@@ -141,7 +141,7 @@ export function LoginScreen({ onLogin, onBootstrap }: LoginScreenProps) {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="input-recessed w-full rounded px-3 py-2 pr-9 text-sm"
-                    placeholder="Ej. Don Juan Pérez"
+                    placeholder="Nombre completo"
                     autoFocus
                   />
                   <User className="w-4 h-4 text-[#9E8FB2] absolute right-3 top-2.5" />
@@ -159,7 +159,7 @@ export function LoginScreen({ onLogin, onBootstrap }: LoginScreenProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input-recessed w-full rounded px-3 py-2 text-sm"
-                placeholder="correo@ejemplo.com"
+                placeholder="Correo electrónico"
                 autoFocus={!isBootstrap}
               />
             </div>

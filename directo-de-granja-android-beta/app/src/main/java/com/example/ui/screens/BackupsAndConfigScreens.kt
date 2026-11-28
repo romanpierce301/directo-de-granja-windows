@@ -274,6 +274,7 @@ fun ConfiguracionScreen(
     onSelectPrinterType: (String) -> Unit,
     onSelectPrinter: (PairedPrinterDevice) -> Unit,
     onTestPrinter: () -> Unit,
+    isConnectedVendor: Boolean = false,
 ) {
     val context = LocalContext.current
     var phone by remember(settings.phone) { mutableStateOf(settings.phone) }
@@ -312,7 +313,7 @@ fun ConfiguracionScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         AuroraTopBar(
-            title = "Configuración",
+            title = if (isConnectedVendor) "Impresora Térmica" else "Configuración",
             subtitle = settings.businessName,
             showDrawerMenu = true,
             onMenuOrBackClick = onOpenDrawer,
@@ -324,111 +325,136 @@ fun ConfiguracionScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Datos del Negocio y Precio Global
-            item {
-                AuroraCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+            if (isConnectedVendor) {
+                item {
+                    AuroraCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Datos sincronizados desde Windows",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = OnSurface,
+                            )
+                            AuroraStatusBadge(text = settings.businessName, tint = Secondary)
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Datos del Negocio",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = OnSurface,
-                        )
-                        AuroraStatusBadge(text = settings.businessName, tint = Secondary)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    AuroraTextField(
-                        value = slogan,
-                        onValueChange = { slogan = it },
-                        label = "Eslogan oficial",
-                        testTag = "config_slogan_input",
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    AuroraTextField(
-                        value = phone,
-                        onValueChange = { phone = it },
-                        label = "Teléfono del negocio",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        testTag = "config_phone_input",
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    AuroraTextField(
-                        value = address,
-                        onValueChange = { address = it },
-                        label = "Dirección del negocio",
-                        singleLine = false,
-                        testTag = "config_address_input",
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    AuroraTextField(
-                        value = globalPriceText,
-                        onValueChange = { globalPriceText = it },
-                        label = "Precio global por kilogramo (MXN)",
-                        suffixText = "MXN/kg",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        testTag = "config_global_price_input",
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    AuroraPrimaryButton(
-                        text = "Guardar Datos y Precio Global",
-                        icon = Icons.Default.Save,
-                        onClick = { onSaveBusinessConfig(phone, address, slogan, globalPriceText) },
-                        testTag = "save_business_config_button",
-                    )
-                }
-            }
-
-            // Precio Especial por Cliente
-            item {
-                AuroraCard {
-                    Text(
-                        text = "Precios Especiales por Cliente",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = OnSurface,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Si un cliente tiene precio especial, se usará en lugar del precio global en sus entregas.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    if (clients.isEmpty()) {
-                        Text(
-                            text = "Registra clientes primero para asignarles tarifas especiales.",
+                            text = "${settings.slogan}\nTel. ${settings.phone} • ${settings.address}\nPrecio global: ${CalculationEngine.formatMoney(settings.globalPricePerKg)} MXN/kg",
                             style = MaterialTheme.typography.bodySmall,
                             color = OnSurfaceVariant,
                         )
-                    } else {
-                        clients.forEach { c ->
-                            Surface(
-                                onClick = { editingSpecialClient = c.client },
-                                color = SurfaceContainerLowest,
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, OutlineVariant),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .testTag("special_price_client_${c.client.id}"),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
+                    }
+                }
+            } else {
+                // Datos del Negocio y Precio Global
+                item {
+                    AuroraCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Datos del Negocio",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = OnSurface,
+                            )
+                            AuroraStatusBadge(text = settings.businessName, tint = Secondary)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        AuroraTextField(
+                            value = slogan,
+                            onValueChange = { slogan = it },
+                            label = "Eslogan oficial",
+                            testTag = "config_slogan_input",
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        AuroraTextField(
+                            value = phone,
+                            onValueChange = { phone = it },
+                            label = "Teléfono del negocio",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            testTag = "config_phone_input",
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        AuroraTextField(
+                            value = address,
+                            onValueChange = { address = it },
+                            label = "Dirección del negocio",
+                            singleLine = false,
+                            testTag = "config_address_input",
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        AuroraTextField(
+                            value = globalPriceText,
+                            onValueChange = { globalPriceText = it },
+                            label = "Precio global por kilogramo (MXN)",
+                            suffixText = "MXN/kg",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            testTag = "config_global_price_input",
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        AuroraPrimaryButton(
+                            text = "Guardar Datos y Precio Global",
+                            icon = Icons.Default.Save,
+                            onClick = { onSaveBusinessConfig(phone, address, slogan, globalPriceText) },
+                            testTag = "save_business_config_button",
+                        )
+                    }
+                }
+
+                // Precio Especial por Cliente
+                item {
+                    AuroraCard {
+                        Text(
+                            text = "Precios Especiales por Cliente",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = OnSurface,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Si un cliente tiene precio especial, se usará en lugar del precio global en sus entregas.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OnSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        if (clients.isEmpty()) {
+                            Text(
+                                text = "Registra clientes primero para asignarles tarifas especiales.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceVariant,
+                            )
+                        } else {
+                            clients.forEach { c ->
+                                Surface(
+                                    onClick = { editingSpecialClient = c.client },
+                                    color = SurfaceContainerLowest,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, OutlineVariant),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .testTag("special_price_client_${c.client.id}"),
                                 ) {
-                                    Text(c.client.name, style = MaterialTheme.typography.titleSmall, color = OnSurface)
-                                    Text(
-                                        text = if (c.client.specialPricePerKg != null) {
-                                            "Especial: ${CalculationEngine.formatMoney(c.client.specialPricePerKg)}/kg"
-                                        } else {
-                                            "Usa global (${CalculationEngine.formatMoney(settings.globalPricePerKg)})"
-                                        },
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = if (c.client.specialPricePerKg != null) Secondary else Primary,
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(c.client.name, style = MaterialTheme.typography.titleSmall, color = OnSurface)
+                                        Text(
+                                            text = if (c.client.specialPricePerKg != null) {
+                                                "Especial: ${CalculationEngine.formatMoney(c.client.specialPricePerKg)}/kg"
+                                            } else {
+                                                "Usa global (${CalculationEngine.formatMoney(settings.globalPricePerKg)})"
+                                            },
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (c.client.specialPricePerKg != null) Secondary else Primary,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -436,7 +462,7 @@ fun ConfiguracionScreen(
                 }
             }
 
-            // Impresora Térmica 60 mm (Bluetooth y USB OTG)
+            // Impresora Térmica 48 mm (Bluetooth y USB OTG)
             item {
                 AuroraCard {
                     Text(
@@ -446,7 +472,7 @@ fun ConfiguracionScreen(
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "Enciende la impresora y pulsa Buscar. Si aparece como Bluetooth, tócala para vincularla con Android. Si aparece como Bluetooth LE, tócala para seleccionarla. Después pulsa Prueba 60 mm.",
+                        text = "Enciende la impresora y pulsa Buscar. Si aparece como Bluetooth, tócala para vincularla con Android. Si aparece como Bluetooth LE, tócala para seleccionarla. Después pulsa Prueba 48 mm.",
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceVariant,
                     )
@@ -509,7 +535,7 @@ fun ConfiguracionScreen(
                             testTag = "scan_printers_button",
                         )
                         AuroraOutlinedButton(
-                            text = "Prueba 60mm",
+                            text = "Prueba 48mm",
                             icon = Icons.Default.Print,
                             onClick = onTestPrinter,
                             accentColor = Secondary,

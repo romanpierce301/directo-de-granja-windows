@@ -61,8 +61,11 @@ export interface LedgerDatabase {
   acknowledgedAlertIds: string[];
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
+const BASE_STORAGE_DIR = process.env.APP_USER_DATA_DIR?.trim()
+  ? path.resolve(process.env.APP_USER_DATA_DIR.trim())
+  : process.cwd();
+const DATA_DIR = path.join(BASE_STORAGE_DIR, 'data');
+const BACKUPS_DIR = path.join(BASE_STORAGE_DIR, 'backups');
 const DEFAULT_SQLITE_FILE = path.join(DATA_DIR, 'directodegranja.db');
 const LEGACY_JSON_FILE = path.join(DATA_DIR, 'huevocontrol-ledger.json');
 
@@ -70,8 +73,11 @@ function resolveDefaultDbPath(): string {
   const envPath = process.env.SQLITE_DB_PATH?.trim();
   if (!envPath) return DEFAULT_SQLITE_FILE;
   if (envPath === ':memory:') return ':memory:';
-  const resolved = path.resolve(process.cwd(), envPath);
-  if (!resolved.startsWith(process.cwd() + path.sep)) {
+  const resolved = path.resolve(BASE_STORAGE_DIR, envPath);
+  if (
+    !resolved.startsWith(BASE_STORAGE_DIR + path.sep) &&
+    !resolved.startsWith(process.cwd() + path.sep)
+  ) {
     return DEFAULT_SQLITE_FILE;
   }
   return resolved;
@@ -103,7 +109,13 @@ function createSeedDatabase(): LedgerDatabase {
       profilePictureUrl: '',
       reduceAnimations: false,
       themeMode: 'dark',
-      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 },
+      nextFolioBySeries: { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1, AB: 1 },
+      printerConfig: {
+        mode: 'system',
+        printerName: '',
+        paperWidthMm: 48,
+        baudRate: 9600,
+      },
     },
     acknowledgedAlertIds: [],
   };
@@ -198,9 +210,10 @@ export class LedgerStore {
           parsed.excelImports ??= [];
           parsed.warehouseShipments ??= [];
           parsed.acknowledgedAlertIds ??= [];
-          parsed.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 };
+          parsed.settings.nextFolioBySeries ??= { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1, AB: 1 };
           parsed.settings.nextFolioBySeries.BD ??= 1;
           parsed.settings.nextFolioBySeries.E ??= 1;
+          parsed.settings.nextFolioBySeries.AB ??= 1;
 
           // Bloquear cuentas demo heredadas durante la migración
           const blockedDemoIds = new Set<string>();
@@ -389,7 +402,8 @@ export class LedgerStore {
         method TEXT NOT NULL,
         status TEXT NOT NULL,
         created_at_utc TEXT NOT NULL,
-        note TEXT NOT NULL
+        note TEXT NOT NULL,
+        receipt_folio TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
       CREATE INDEX IF NOT EXISTS idx_payments_delivery_id ON payments(delivery_id);
@@ -506,7 +520,8 @@ export class LedgerStore {
         profile_picture_url TEXT NOT NULL,
         reduce_animations INTEGER NOT NULL,
         theme_mode TEXT NOT NULL,
-        next_folio_by_series_json TEXT NOT NULL
+        next_folio_by_series_json TEXT NOT NULL,
+        printer_config_json TEXT
       );
 
       CREATE TABLE IF NOT EXISTS acknowledged_alerts (
@@ -523,10 +538,12 @@ export class LedgerStore {
     );
     this.ensureColumnExists('customers', 'special_price_centavos_per_kg', 'INTEGER');
     this.ensureColumnExists('customers', 'credit_term_days', 'INTEGER');
+    this.ensureColumnExists('payments', 'receipt_folio', 'TEXT');
+    this.ensureColumnExists('app_settings', 'printer_config_json', 'TEXT');
   }
 
   private ensureColumnExists(table: string, column: string, definition: string): void {
-    const allowedTables = new Set(['deliveries', 'warehouse_shipment_lines', 'customers']);
+    const allowedTables = new Set(['deliveries', 'warehouse_shipment_lines', 'customers', 'payments', 'app_settings']);
     if (!allowedTables.has(table)) return;
     const cols = this.sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!cols.some((c) => c.name === column)) {
@@ -716,6 +733,7 @@ export class LedgerStore {
           status: r.status,
           createdAtUtc: r.created_at_utc,
           note: decryptField(r.note),
+          receiptFolio: r.receipt_folio ?? null,
         };
       }
     ) as Payment[];
@@ -870,11 +888,15 @@ export class LedgerStore {
             settingsRow.next_folio_by_series_json,
             { A: 1, B: 1, C: 1, D: 1, BD: 1, E: 1 }
           ),
+          printerConfig: settingsRow.printer_config_json
+            ? safeJsonParse(settingsRow.printer_config_json, createSeedDatabase().settings.printerConfig!)
+            : createSeedDatabase().settings.printerConfig,
         }
       : createSeedDatabase().settings;
 
     settings.nextFolioBySeries.BD ??= 1;
     settings.nextFolioBySeries.E ??= 1;
+    settings.nextFolioBySeries.AB ??= 1;
 
     const acknowledgedAlertIds = (
       this.sqlite
@@ -1079,8 +1101,8 @@ export class LedgerStore {
       );
 
       const insPay = this.sqlite.prepare(`
-        INSERT INTO payments (id, sort_order, customer_id, delivery_id, vendor_id, amount_centavos, method, status, created_at_utc, note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO payments (id, sort_order, customer_id, delivery_id, vendor_id, amount_centavos, method, status, created_at_utc, note, receipt_folio)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       data.payments.forEach((p, i) =>
         insPay.run(
@@ -1093,7 +1115,8 @@ export class LedgerStore {
           p.method,
           p.status,
           p.createdAtUtc,
-          encryptField(p.note)
+          encryptField(p.note),
+          p.receiptFolio ?? null
         )
       );
 
@@ -1235,8 +1258,8 @@ export class LedgerStore {
 
       this.sqlite
         .prepare(`
-          INSERT INTO app_settings (id, business_name, slogan, business_phone, business_address, profile_picture_url, reduce_animations, theme_mode, next_folio_by_series_json)
-          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO app_settings (id, business_name, slogan, business_phone, business_address, profile_picture_url, reduce_animations, theme_mode, next_folio_by_series_json, printer_config_json)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             business_name = excluded.business_name,
             slogan = excluded.slogan,
@@ -1245,7 +1268,8 @@ export class LedgerStore {
             profile_picture_url = excluded.profile_picture_url,
             reduce_animations = excluded.reduce_animations,
             theme_mode = excluded.theme_mode,
-            next_folio_by_series_json = excluded.next_folio_by_series_json
+            next_folio_by_series_json = excluded.next_folio_by_series_json,
+            printer_config_json = excluded.printer_config_json
         `)
         .run(
           data.settings.businessName,
@@ -1255,7 +1279,15 @@ export class LedgerStore {
           data.settings.profilePictureUrl ?? '',
           data.settings.reduceAnimations ? 1 : 0,
           data.settings.themeMode,
-          JSON.stringify(data.settings.nextFolioBySeries ?? {})
+          JSON.stringify(data.settings.nextFolioBySeries ?? {}),
+          JSON.stringify(
+            data.settings.printerConfig ?? {
+              mode: 'system',
+              printerName: '',
+              paperWidthMm: 48,
+              baudRate: 9600,
+            }
+          )
         );
 
       const insAck = this.sqlite.prepare(`

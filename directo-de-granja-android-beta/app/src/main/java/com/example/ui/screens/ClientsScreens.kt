@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Store
@@ -84,6 +87,7 @@ import com.example.ui.theme.SurfaceContainer
 import com.example.ui.theme.SurfaceContainerLow
 import com.example.ui.viewmodel.ClientWithDebt
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -473,8 +477,10 @@ fun PerfilClienteScreen(
     settings: BusinessSettingsEntity,
     onBack: () -> Unit,
     onStartNewDeliveryForClient: (Long) -> Unit,
-    onRecordAbono: (clientId: Long, deliveryId: Long, amount: String, note: String, onDone: () -> Unit) -> Unit,
+    onRecordAbono: (clientId: Long, deliveryId: Long, amount: String, note: String, paymentMethod: String, onDone: (Long) -> Unit) -> Unit,
     onOpenTicket: (Long) -> Unit,
+    totalPendingDebtMxn: Double? = null,
+    onOpenAbonoTicket: (Long) -> Unit = {},
 ) {
     if (client == null) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -497,8 +503,12 @@ fun PerfilClienteScreen(
     val activeDeliveriesWithDebt = remember(deliveries) {
         deliveries.filter { it.status == "ACTIVA" && it.pendingBalanceMxn > 0.0 }
     }
-    val totalPendingDebt = remember(activeDeliveriesWithDebt) {
+    val deliveriesPendingDebt = remember(activeDeliveriesWithDebt) {
         activeDeliveriesWithDebt.fold(BigDecimal.ZERO) { acc, d -> acc.add(BigDecimal.valueOf(d.pendingBalanceMxn)) }
+    }
+    val totalPendingDebt = remember(deliveriesPendingDebt, totalPendingDebtMxn) {
+        val synced = BigDecimal.valueOf(totalPendingDebtMxn ?: 0.0).setScale(2, RoundingMode.HALF_UP)
+        if (synced > deliveriesPendingDebt) synced else deliveriesPendingDebt.setScale(2, RoundingMode.HALF_UP)
     }
     val effectiveTariff = client.specialPricePerKg ?: settings.globalPricePerKg
     val dateFmt = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("es", "MX")) }
@@ -550,7 +560,7 @@ fun PerfilClienteScreen(
                 }
             }
 
-            // Total acumulado pendiente + Registro de abono
+            // Total acumulado pendiente + Registro de abono sin compra obligatoria
             item {
                 AuroraCard {
                     Text(
@@ -566,15 +576,15 @@ fun PerfilClienteScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = if (activeDeliveriesWithDebt.isEmpty()) {
-                            "Sin adeudos activos"
-                        } else {
-                            "${activeDeliveriesWithDebt.size} nota(s) con saldo pendiente"
+                        text = when {
+                            totalPendingDebt <= BigDecimal.ZERO -> "Sin adeudos activos"
+                            activeDeliveriesWithDebt.isEmpty() -> "Saldo pendiente en cuenta (puedes abonar sin comprar)"
+                            else -> "${activeDeliveriesWithDebt.size} nota(s) con saldo pendiente • Puedes abonar sin nueva compra"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceVariant,
                     )
-                    if (activeDeliveriesWithDebt.isNotEmpty()) {
+                    if (totalPendingDebt > BigDecimal.ZERO) {
                         Spacer(Modifier.height(12.dp))
                         AuroraOutlinedButton(
                             text = "Registrar Abono a Deuda",
@@ -660,29 +670,52 @@ fun PerfilClienteScreen(
                 }
             } else {
                 items(abonos, key = { "abono_${it.id}" }) { ab ->
-                    AuroraCard(contentPadding = PaddingValues(14.dp)) {
+                    val methodLabel = if (ab.paymentMethod == "transferencia") "Transferencia" else "Efectivo"
+                    val folioPrefix = ab.receiptFolio.takeIf { it.isNotBlank() }?.let { "$it • " } ?: ""
+                    AuroraCard(
+                        onClick = { onOpenAbonoTicket(ab.id) },
+                        contentPadding = PaddingValues(14.dp),
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Abono a ${ab.deliveryFolio}",
+                                    text = "${folioPrefix}Abono (${ab.deliveryFolio})",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = OnSurface,
                                 )
                                 Text(
-                                    text = dateFmt.format(Date(ab.dateMillis)) +
+                                    text = "${dateFmt.format(Date(ab.dateMillis))} • $methodLabel" +
                                         if (ab.note.isNotBlank()) " • ${ab.note}" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = OnSurfaceVariant,
                                 )
                             }
-                            Text(
-                                text = "-${CalculationEngine.formatMoney(ab.amountMxn)} MXN",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = PrimaryGlow,
-                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "-${CalculationEngine.formatMoney(ab.amountMxn)} MXN",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = PrimaryGlow,
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Print,
+                                        contentDescription = null,
+                                        tint = Primary,
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "Ticket 48 mm",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Primary,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -762,13 +795,17 @@ fun PerfilClienteScreen(
         }
     }
 
-    if (showAbonoDialog && activeDeliveriesWithDebt.isNotEmpty()) {
+    if (showAbonoDialog && totalPendingDebt > BigDecimal.ZERO) {
         AbonoDialog(
+            totalPendingDebtMxn = totalPendingDebt.toDouble(),
             deliveries = activeDeliveriesWithDebt,
             onDismiss = { showAbonoDialog = false },
-            onConfirm = { deliveryId, amountText, note ->
-                onRecordAbono(client.id, deliveryId, amountText, note) {
+            onConfirm = { deliveryId, amountText, note, paymentMethod ->
+                onRecordAbono(client.id, deliveryId, amountText, note, paymentMethod) { abonoId ->
                     showAbonoDialog = false
+                    if (abonoId > 0L) {
+                        onOpenAbonoTicket(abonoId)
+                    }
                 }
             },
         )
@@ -780,28 +817,62 @@ private fun Int.spWithFallback() = androidx.compose.ui.unit.TextUnit(this.toFloa
 
 @Composable
 private fun AbonoDialog(
+    totalPendingDebtMxn: Double,
     deliveries: List<DeliveryEntity>,
     onDismiss: () -> Unit,
-    onConfirm: (deliveryId: Long, amountText: String, note: String) -> Unit,
+    onConfirm: (deliveryId: Long, amountText: String, note: String, paymentMethod: String) -> Unit,
 ) {
-    var selectedDeliveryId by remember { mutableStateOf(deliveries.first().id) }
+    var selectedDeliveryId by remember { mutableStateOf(0L) }
     var amountText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    val selectedDelivery = deliveries.firstOrNull { it.id == selectedDeliveryId } ?: deliveries.first()
+    var paymentMethod by remember { mutableStateOf("efectivo") }
+    val selectedDelivery = deliveries.firstOrNull { it.id == selectedDeliveryId }
+    val maxForTarget = selectedDelivery?.pendingBalanceMxn ?: totalPendingDebtMxn
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SurfaceContainer,
         title = { Text("Registrar Abono", color = OnSurface) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
-                    text = "Selecciona la nota a abonar:",
+                    text = "Aplicar abono a:",
                     style = MaterialTheme.typography.labelMedium,
                     color = OnSurfaceVariant,
                 )
+                Surface(
+                    onClick = { selectedDeliveryId = 0L },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selectedDeliveryId == 0L) Primary.copy(alpha = 0.16f) else SurfaceContainerLow,
+                    border = BorderStroke(
+                        1.dp,
+                        if (selectedDeliveryId == 0L) Primary else OnSurfaceVariant.copy(alpha = 0.2f),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Saldo general (automático)",
+                            color = OnSurface,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "${CalculationEngine.formatMoney(totalPendingDebtMxn)} MXN",
+                            color = Secondary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
                 deliveries.forEach { d ->
-                    val selected = d.id == selectedDelivery.id
+                    val selected = d.id == selectedDeliveryId
                     Surface(
                         onClick = { selectedDeliveryId = d.id },
                         shape = RoundedCornerShape(12.dp),
@@ -822,14 +893,42 @@ private fun AbonoDialog(
                         }
                     }
                 }
+
                 AuroraTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
                     label = "Monto del abono (MXN)",
-                    placeholder = "Máximo: ${CalculationEngine.formatMoney(selectedDelivery.pendingBalanceMxn)}",
+                    placeholder = "Máximo: ${CalculationEngine.formatMoney(maxForTarget)}",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     testTag = "abono_amount_input",
                 )
+
+                Text(
+                    text = "Forma de pago:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = OnSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf("efectivo" to "Efectivo", "transferencia" to "Transferencia").forEach { (key, label) ->
+                        val active = paymentMethod == key
+                        FilterChip(
+                            selected = active,
+                            onClick = { paymentMethod = key },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Primary.copy(alpha = 0.2f),
+                                selectedLabelColor = Primary,
+                                containerColor = SurfaceContainerLow,
+                                labelColor = OnSurfaceVariant,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
                 AuroraTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -840,7 +939,7 @@ private fun AbonoDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(selectedDelivery.id, amountText, note) },
+                onClick = { onConfirm(selectedDelivery?.id ?: 0L, amountText, note, paymentMethod) },
                 colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary),
                 modifier = Modifier
                     .heightIn(min = 48.dp)

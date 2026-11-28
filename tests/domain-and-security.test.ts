@@ -8,6 +8,7 @@ import {
   calculateDeliveryTotals,
   calculateSugarLineSubtotalCentavos,
   calculateVendorClosing,
+  computeCustomerPaymentBalances,
   deductCartonTareFromPerBoxWeights,
   escapeExcelFormulaInjection,
   normalizeCustomerName,
@@ -923,6 +924,174 @@ describe('Sincronización Android-Windows: tarifa especial, plazo de crédito y 
     expect(isAllowedOrigin('javascript:alert(1)', 'localhost:3000')).toBe(false);
   });
 });
+
+describe('Abonos parciales independientes (sin compra nueva) y folio AB-XXXX en SQLite', () => {
+  it('Calcula saldo previo, saldo restante y etiqueta aplicada cronológicamente para abonos sin compra nueva', () => {
+    const deliveries: Delivery[] = [
+      {
+        id: 'del-cr-1',
+        vendorId: 'usr-1',
+        vendorName: 'Carlos',
+        workdayId: 'wd-1',
+        driverName: 'Luis',
+        helpersNames: [],
+        series: 'A',
+        folioNumber: 1,
+        folioFormatted: 'A-0001',
+        customerId: 'cust-ab-1',
+        customerName: 'Abarrotes Sol',
+        createdAtUtc: '2026-11-20T10:00:00Z',
+        priceCentavosPerKg: 4000,
+        isSpecialPrice: false,
+        totalGrams: 50000,
+        calculatedTotalExactMilliCentavos: 200000000,
+        totalToChargeCentavos: 200000, // $2,000
+        status: 'vigente',
+        cancellationReason: null,
+        syncedAtUtc: '2026-11-20T10:00:00Z',
+      },
+      {
+        id: 'del-cr-2',
+        vendorId: 'usr-1',
+        vendorName: 'Carlos',
+        workdayId: 'wd-1',
+        driverName: 'Luis',
+        helpersNames: [],
+        series: 'A',
+        folioNumber: 2,
+        folioFormatted: 'A-0002',
+        customerId: 'cust-ab-1',
+        customerName: 'Abarrotes Sol',
+        createdAtUtc: '2026-11-21T10:00:00Z',
+        priceCentavosPerKg: 4000,
+        isSpecialPrice: false,
+        totalGrams: 25000,
+        calculatedTotalExactMilliCentavos: 100000000,
+        totalToChargeCentavos: 100000, // $1,000
+        status: 'vigente',
+        cancellationReason: null,
+        syncedAtUtc: '2026-11-21T10:00:00Z',
+      },
+    ];
+
+    const payments: Payment[] = [
+      {
+        id: 'pay-ab-1',
+        customerId: 'cust-ab-1',
+        deliveryId: null, // Abono general independiente sin nueva compra
+        vendorId: 'usr-1',
+        amountCentavos: 80000, // $800
+        method: 'efectivo',
+        status: 'verificado',
+        createdAtUtc: '2026-11-22T09:00:00Z',
+        note: 'Abono en ruta sin compra',
+        receiptFolio: 'AB-0001',
+      },
+      {
+        id: 'pay-ab-2',
+        customerId: 'cust-ab-1',
+        deliveryId: 'del-cr-1', // Abono directo a una nota específica
+        vendorId: 'usr-owner',
+        amountCentavos: 120000, // $1,200
+        method: 'transferencia',
+        status: 'por_verificar',
+        createdAtUtc: '2026-11-23T11:30:00Z',
+        note: 'Liquidación parcial',
+        receiptFolio: 'AB-0002',
+      },
+    ];
+
+    const balances = computeCustomerPaymentBalances('cust-ab-1', deliveries, payments);
+    const b1 = balances.get('pay-ab-1')!;
+    expect(b1.previousBalanceCentavos).toBe(300000);
+    expect(b1.remainingBalanceCentavos).toBe(220000);
+    expect(b1.appliedToLabel).toBe('Saldo de cuenta');
+
+    const b2 = balances.get('pay-ab-2')!;
+    expect(b2.previousBalanceCentavos).toBe(220000);
+    expect(b2.remainingBalanceCentavos).toBe(100000);
+    expect(b2.appliedToLabel).toBe('Entrega A-0001');
+
+    const ledger = calculateCustomerLedger('cust-ab-1', deliveries, payments);
+    expect(ledger.balanceCentavos).toBe(100000);
+    expect(() => validatePaymentAmount(150000, ledger.balanceCentavos)).toThrow(/no puede ser mayor/);
+  });
+
+  it('Persiste receipt_folio (AB-XXXX) y abonos sin deliveryId en SQLite tras reiniciar', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-abono-sqlite-'));
+    const dbPath = path.join(tmpDir, 'abonos.db');
+
+    try {
+      const store1 = createLedgerStore(dbPath);
+      const db1 = store1.getDb();
+      db1.customers.push({
+        id: 'cust-solo-1',
+        businessName: 'Cremería Norte',
+        contactName: 'Jorge',
+        phone: '5511002200',
+        address: 'Av. Reforma 99',
+        notes: '',
+        active: true,
+        createdByUserId: 'usr-owner-01',
+        mergedIntoCustomerId: null,
+        createdAtUtc: '2026-11-24T08:00:00Z',
+      });
+      db1.deliveries.push({
+        id: 'del-solo-1',
+        vendorId: 'usr-owner-01',
+        vendorName: 'Dueño',
+        workdayId: 'wd-1',
+        driverName: 'Mostrador',
+        helpersNames: [],
+        series: 'BD',
+        folioNumber: 1,
+        folioFormatted: 'BD-0001',
+        customerId: 'cust-solo-1',
+        customerName: 'Cremería Norte',
+        createdAtUtc: '2026-11-24T08:05:00Z',
+        priceCentavosPerKg: 4000,
+        isSpecialPrice: false,
+        totalGrams: 50000,
+        calculatedTotalExactMilliCentavos: 200000000,
+        totalToChargeCentavos: 200000,
+        status: 'vigente',
+        cancellationReason: null,
+        syncedAtUtc: '2026-11-24T08:05:00Z',
+      });
+
+      const abFolio = store1.reserveNextFolio('AB').folioFormatted;
+      expect(abFolio).toBe('AB-0001');
+      db1.payments.push({
+        id: 'pay-solo-1',
+        customerId: 'cust-solo-1',
+        deliveryId: null,
+        vendorId: 'usr-owner-01',
+        amountCentavos: 75000,
+        method: 'efectivo',
+        status: 'verificado',
+        createdAtUtc: '2026-11-25T14:00:00Z',
+        note: 'Abono parcial independiente',
+        receiptFolio: abFolio,
+      });
+      store1.persist();
+      store1.close();
+
+      const store2 = createLedgerStore(dbPath);
+      const db2 = store2.getDb();
+      expect(db2.payments).toHaveLength(1);
+      expect(db2.payments[0].deliveryId).toBeNull();
+      expect(db2.payments[0].receiptFolio).toBe('AB-0001');
+      expect(db2.payments[0].amountCentavos).toBe(75000);
+      expect(db2.settings.nextFolioBySeries.AB).toBe(2);
+      const ledger = calculateCustomerLedger('cust-solo-1', db2.deliveries, db2.payments);
+      expect(ledger.balanceCentavos).toBe(125000);
+      store2.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 
 
 

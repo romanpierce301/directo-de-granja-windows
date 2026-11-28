@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   AlertCircle,
   Bell,
@@ -6,7 +5,6 @@ import {
   Clock,
   RefreshCw,
   Send,
-  Smartphone,
   TrendingUp,
 } from 'lucide-react';
 import {
@@ -36,8 +34,6 @@ export function PanelGeneralView({
   onRefresh,
   onNotify,
 }: PanelGeneralViewProps) {
-  const [simulating, setSimulating] = useState(false);
-
   const todayYmd = getMexicoCityYmd();
   const todayPrice = state.dailyPrices.find((p) => p.dateYmd === todayYmd) ?? state.dailyPrices[0];
 
@@ -51,32 +47,6 @@ export function PanelGeneralView({
 
   const activeVendors = state.users.filter((u) => u.role === 'vendedor');
   const activeAlerts = state.alerts.filter((a) => !a.acknowledged);
-
-  const handleSimulateAndroidDelivery = async () => {
-    const activeVendor = activeVendors.find((v) => v.status === 'activa');
-    const activeCustomer = state.customers.find((c) => !c.mergedIntoCustomerId && c.active);
-    if (!activeVendor || !activeCustomer || !todayPrice) {
-      onNotify('Se requiere al menos un vendedor activo, un cliente y precio del día.');
-      return;
-    }
-    setSimulating(true);
-    try {
-      await apiClient.simulateAndroidSync({
-        simulateFromVendorId: activeVendor.id,
-        customerId: activeCustomer.id,
-        boxesGrams: [25150, 24850],
-        priceCentavosPerKg: todayPrice.priceCentavosPerKg,
-        paymentAmountCentavos: 100000,
-        paymentMethod: 'efectivo',
-      });
-      await onRefresh();
-      onNotify(`Entrega sincronizada en tiempo real desde Android (${activeVendor.name}).`);
-    } catch (err) {
-      onNotify((err as Error).message);
-    } finally {
-      setSimulating(false);
-    }
-  };
 
   const handleAckAlert = async (id: string) => {
     await apiClient.ackAlert(id);
@@ -98,15 +68,6 @@ export function PanelGeneralView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <TactileButton
-            variant="info"
-            size="sm"
-            icon={<Smartphone className="w-4 h-4" />}
-            disabled={simulating}
-            onClick={handleSimulateAndroidDelivery}
-          >
-            {simulating ? 'Sincronizando...' : 'Probar sync Android en vivo'}
-          </TactileButton>
           <TactileButton
             variant="primary"
             size="sm"

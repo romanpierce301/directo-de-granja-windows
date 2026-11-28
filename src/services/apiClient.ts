@@ -1,5 +1,11 @@
 import type { LedgerDatabase } from '../../server/store.ts';
-import type { HalfBoxWeighType, ProactiveAlert, UserAccount } from '../../shared/domain.ts';
+import type {
+  HalfBoxWeighType,
+  Payment,
+  ProactiveAlert,
+  UserAccount,
+  WindowsPrinterConfig,
+} from '../../shared/domain.ts';
 
 export interface DashboardState extends Omit<LedgerDatabase, 'users'> {
   users: Omit<UserAccount, 'passwordHash'>[];
@@ -162,7 +168,12 @@ export class ApiClient {
   public async recordCustomerPayment(
     customerId: string,
     payload: { amountPesos: number; method: 'efectivo' | 'transferencia'; note: string }
-  ) {
+  ): Promise<{
+    ok?: boolean;
+    payment: Payment;
+    previousBalanceCentavos?: number;
+    newBalanceCentavos?: number;
+  }> {
     return this.request(`/api/customers/${customerId}/payments`, {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -211,6 +222,7 @@ export class ApiClient {
     profilePictureUrl?: string;
     reduceAnimations?: boolean;
     themeMode?: 'dark' | 'light';
+    printerConfig?: WindowsPrinterConfig;
   }) {
     return this.request('/api/settings', {
       method: 'POST',
@@ -275,48 +287,6 @@ export class ApiClient {
     return this.request('/api/bodega/sales', {
       method: 'POST',
       body: JSON.stringify(payload),
-    });
-  }
-
-  public async simulateAndroidSync(payload: {
-    simulateFromVendorId: string;
-    customerId: string;
-    boxesGrams: number[];
-    priceCentavosPerKg: number;
-    paymentAmountCentavos?: number;
-    paymentMethod?: 'efectivo' | 'transferencia';
-  }) {
-    const delId = `del-sync-${crypto.randomUUID()}`;
-    const deliveries = [
-      {
-        id: delId,
-        customerId: payload.customerId,
-        boxesGrams: payload.boxesGrams,
-        priceCentavosPerKg: payload.priceCentavosPerKg,
-        createdAtUtc: new Date().toISOString(),
-      },
-    ];
-    const payments =
-      payload.paymentAmountCentavos && payload.paymentAmountCentavos > 0
-        ? [
-            {
-              id: `pay-sync-${crypto.randomUUID()}`,
-              customerId: payload.customerId,
-              deliveryId: delId,
-              amountCentavos: payload.paymentAmountCentavos,
-              method: payload.paymentMethod ?? 'efectivo',
-              note: 'Cobro sincronizado desde Android',
-            },
-          ]
-        : [];
-    return this.request('/api/sync/push', {
-      method: 'POST',
-      body: JSON.stringify({
-        deviceId: 'android-sync-live',
-        simulateFromVendorId: payload.simulateFromVendorId,
-        deliveries,
-        payments,
-      }),
     });
   }
 

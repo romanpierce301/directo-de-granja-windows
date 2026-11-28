@@ -1,15 +1,22 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { GitMerge, Plus, Search, Wallet } from 'lucide-react';
+import { GitMerge, Plus, Printer, Search, Wallet, X } from 'lucide-react';
 import {
   calculateCustomerLedger,
+  computeCustomerPaymentBalances,
   formatCurrencyFromCentavos,
   formatMexicoCityDate,
   formatMexicoCityTime,
   normalizeCustomerName,
   normalizePhone,
+  type Payment,
 } from '../../shared/domain.ts';
 import { apiClient, type DashboardState } from '../services/apiClient.ts';
 import { TactileButton } from '../components/TactileButton.tsx';
+import { AbonoTicket48mm } from '../components/Ticket48mm.tsx';
+import {
+  buildEscPosAbonoTicketBytes,
+  printTicket48mm,
+} from '../services/windowsPrinter.ts';
 
 interface ClientesViewProps {
   state: DashboardState;
@@ -41,6 +48,14 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
   const [abonoPesos, setAbonoPesos] = useState('');
   const [abonoMethod, setAbonoMethod] = useState<'efectivo' | 'transferencia'>('efectivo');
   const [abonoNote, setAbonoNote] = useState('Abono posterior en oficina');
+  const [selectedTicketPayment, setSelectedTicketPayment] = useState<{
+    payment: Payment;
+    customerName: string;
+    previousBalanceCentavos: number;
+    remainingBalanceCentavos: number;
+    appliedToLabel: string;
+    isCopy: boolean;
+  } | null>(null);
 
   // Merge duplicate customers fields
   const [primaryId, setPrimaryId] = useState('');
@@ -85,8 +100,18 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
     ? state.deliveries.filter((d) => d.customerId === selectedCustomer.id)
     : [];
   const selectedPayments = selectedCustomer
-    ? state.payments.filter((p) => p.customerId === selectedCustomer.id)
+    ? state.payments
+        .filter((p) => p.customerId === selectedCustomer.id)
+        .slice()
+        .sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc))
     : [];
+  const paymentBalanceMap = useMemo(
+    () =>
+      selectedCustomer
+        ? computeCustomerPaymentBalances(selectedCustomer.id, state.deliveries, state.payments)
+        : new Map(),
+    [selectedCustomer, state.deliveries, state.payments]
+  );
 
   const handleCreateCustomer = async (e: FormEvent) => {
     e.preventDefault();
@@ -133,9 +158,10 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
 
   const handleRecordAbono = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || !selectedLedger) return;
     try {
-      await apiClient.recordCustomerPayment(selectedCustomer.id, {
+      const prevBal = selectedLedger.balanceCentavos;
+      const res = await apiClient.recordCustomerPayment(selectedCustomer.id, {
         amountPesos: Number(abonoPesos),
         method: abonoMethod,
         note: abonoNote,
@@ -143,6 +169,78 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
       setAbonoPesos('');
       await onRefresh();
       onNotify(`Abono registrado en la cuenta de ${selectedCustomer.businessName}.`);
+      if (res.payment) {
+        const appliedLabel = res.payment.deliveryId
+          ? `Entrega ${
+              state.deliveries.find((d) => d.id === res.payment.deliveryId)?.folioFormatted ??
+              res.payment.deliveryId
+            }`
+          : 'Saldo de cuenta';
+        setSelectedTicketPayment({
+          payment: res.payment,
+          customerName: selectedCustomer.businessName,
+          previousBalanceCentavos: res.previousBalanceCentavos ?? prevBal,
+          remainingBalanceCentavos:
+            res.newBalanceCentavos ?? Math.max(0, prevBal - res.payment.amountCentavos),
+          appliedToLabel: appliedLabel,
+          isCopy: false,
+        });
+      }
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
+  };
+
+  const openPaymentTicket = (payment: Payment, isCopy = false) => {
+    if (!selectedCustomer) return;
+    const info = paymentBalanceMap.get(payment.id);
+    setSelectedTicketPayment({
+      payment,
+      customerName: selectedCustomer.businessName,
+      previousBalanceCentavos: info?.previousBalanceCentavos ?? payment.amountCentavos,
+      remainingBalanceCentavos: info?.remainingBalanceCentavos ?? 0,
+      appliedToLabel: info?.appliedToLabel ?? 'Saldo de cuenta',
+      isCopy,
+    });
+  };
+
+  const handlePrintAbono = async () => {
+    if (!selectedTicketPayment) return;
+    setSelectedTicketPayment((prev) => (prev ? { ...prev, isCopy: false } : prev));
+    try {
+      await new Promise((r) => window.setTimeout(r, 80));
+      const escPos = buildEscPosAbonoTicketBytes({
+        payment: selectedTicketPayment.payment,
+        customerName: selectedTicketPayment.customerName,
+        previousBalanceCentavos: selectedTicketPayment.previousBalanceCentavos,
+        remainingBalanceCentavos: selectedTicketPayment.remainingBalanceCentavos,
+        appliedToLabel: selectedTicketPayment.appliedToLabel,
+        settings: state.settings,
+        isCopy: false,
+      });
+      const msg = await printTicket48mm(state.settings.printerConfig, escPos);
+      onNotify(msg);
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
+  };
+
+  const handleReprintAbonoCopy = async () => {
+    if (!selectedTicketPayment) return;
+    setSelectedTicketPayment((prev) => (prev ? { ...prev, isCopy: true } : prev));
+    try {
+      await new Promise((r) => window.setTimeout(r, 80));
+      const escPos = buildEscPosAbonoTicketBytes({
+        payment: selectedTicketPayment.payment,
+        customerName: selectedTicketPayment.customerName,
+        previousBalanceCentavos: selectedTicketPayment.previousBalanceCentavos,
+        remainingBalanceCentavos: selectedTicketPayment.remainingBalanceCentavos,
+        appliedToLabel: selectedTicketPayment.appliedToLabel,
+        settings: state.settings,
+        isCopy: true,
+      });
+      const msg = await printTicket48mm(state.settings.printerConfig, escPos);
+      onNotify(msg);
     } catch (err) {
       onNotify((err as Error).message);
     }
@@ -506,7 +604,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                 )}
               </div>
 
-              {/* Registrar abono posterior */}
+              {/* Registrar abono parcial a deuda (sin compra de mercancía) */}
               {selectedLedger.balanceCentavos > 0 && (
                 <form
                   onSubmit={handleRecordAbono}
@@ -514,17 +612,18 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold text-[#130824] dark:text-[#F4EFFF]">
                     <Wallet className="w-3.5 h-3.5 text-[#8A2BE2] dark:text-[#C084FC]" />
-                    <span>Registrar abono posterior</span>
+                    <span>Abono parcial a deuda (sin compra)</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
                       step="0.01"
                       min="1"
+                      max={(selectedLedger.balanceCentavos / 100).toFixed(2)}
                       required
                       value={abonoPesos}
                       onChange={(e) => setAbonoPesos(e.target.value)}
-                      placeholder="Monto ($ MXN)"
+                      placeholder={`Monto máx $${(selectedLedger.balanceCentavos / 100).toFixed(2)}`}
                       className="input-recessed rounded px-2.5 py-1.5 text-xs font-mono"
                     />
                     <select
@@ -545,7 +644,7 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                     className="input-recessed w-full rounded px-2.5 py-1.5 text-xs"
                   />
                   <TactileButton type="submit" variant="emerald" size="sm" className="w-full">
-                    Aplicar abono a ventas más antiguas
+                    Registrar abono y ver ticket 48mm
                   </TactileButton>
                 </form>
               )}
@@ -584,19 +683,39 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
                   {selectedPayments.map((p) => (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between py-1.5 border-b border-[#DFD7EE]/80 dark:border-[#341961] text-[#059669] dark:text-[#10B981]"
+                      className="flex items-center justify-between gap-2 py-1.5 border-b border-[#DFD7EE]/80 dark:border-[#341961] text-[#059669] dark:text-[#10B981]"
                     >
-                      <div>
-                        <span className="font-semibold capitalize">Pago ({p.method})</span>
-                        <span className="mx-1.5 opacity-60">·</span>
-                        <span className="text-[11px] opacity-80">
-                          {formatMexicoCityDate(p.createdAtUtc)}{' '}
-                          {formatMexicoCityTime(p.createdAtUtc)}
-                        </span>
+                      <div className="min-w-0 flex-1">
+                        <div>
+                          <span className="font-semibold capitalize">
+                            {p.receiptFolio ? `${p.receiptFolio} · ` : ''}Abono ({p.method})
+                          </span>
+                          <span className="mx-1.5 opacity-60">·</span>
+                          <span className="text-[11px] opacity-80">
+                            {formatMexicoCityDate(p.createdAtUtc)}{' '}
+                            {formatMexicoCityTime(p.createdAtUtc)}
+                          </span>
+                        </div>
+                        {p.note && (
+                          <div className="text-[10px] text-[#6B5B82] dark:text-[#9E8FB2] truncate">
+                            {p.note}
+                          </div>
+                        )}
                       </div>
-                      <span className="font-mono tabular-nums font-bold">
-                        -{formatCurrencyFromCentavos(p.amountCentavos)}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono tabular-nums font-bold">
+                          -{formatCurrencyFromCentavos(p.amountCentavos)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openPaymentTicket(p, false)}
+                          title="Imprimir ticket de abono 48mm"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[#8A2BE2]/40 bg-[#8A2BE2]/10 text-[#7C3AED] dark:text-[#C084FC] text-[10px] font-semibold hover:bg-[#8A2BE2]/20"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>Ticket</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -609,6 +728,37 @@ export function ClientesView({ state, onRefresh, onNotify }: ClientesViewProps) 
           )}
         </div>
       </div>
+
+      {/* Modal de Ticket de Abono 48mm */}
+      {selectedTicketPayment && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#130824] border border-[#DFD7EE] dark:border-[#341961] rounded-xl p-5 max-w-sm w-full space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between print:hidden">
+              <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
+                Ticket de Abono 48mm
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedTicketPayment(null)}
+                className="p-1 rounded hover:bg-[#8A2BE2]/15 text-[#6B5B82] dark:text-[#D9CEEE]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <AbonoTicket48mm
+              payment={selectedTicketPayment.payment}
+              customerName={selectedTicketPayment.customerName}
+              previousBalanceCentavos={selectedTicketPayment.previousBalanceCentavos}
+              remainingBalanceCentavos={selectedTicketPayment.remainingBalanceCentavos}
+              appliedToLabel={selectedTicketPayment.appliedToLabel}
+              settings={state.settings}
+              isCopy={selectedTicketPayment.isCopy}
+              onPrint={handlePrintAbono}
+              onReprint={handleReprintAbonoCopy}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

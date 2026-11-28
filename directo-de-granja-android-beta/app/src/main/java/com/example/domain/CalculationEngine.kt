@@ -383,6 +383,23 @@ object CalculationEngine {
         return "$" + df.format(amount)
     }
 
+    fun formatTicketMoney(amount: Double, forceDecimals: Boolean = false): String {
+        val safe = if (amount.isFinite()) amount else 0.0
+        val neg = if (safe < 0.0) "-" else ""
+        val absCentavos = BigDecimal.valueOf(kotlin.math.abs(safe))
+            .multiply(BigDecimal(100))
+            .setScale(0, RoundingMode.HALF_UP)
+            .toLong()
+        val pesos = absCentavos / 100L
+        val rem = absCentavos % 100L
+        val pesosFormatted = DecimalFormat("#,##0", mxSymbols).format(pesos)
+        return if (rem == 0L && !forceDecimals) {
+            "$neg$$pesosFormatted"
+        } else {
+            "$neg$$pesosFormatted.${rem.toString().padStart(2, '0')}"
+        }
+    }
+
     fun formatExactWeight(kg: Double): String {
         val bd = BigDecimal.valueOf(kg).stripTrailingZeros()
         val scale = maxOf(2, minOf(bd.scale().coerceAtLeast(0), 3))

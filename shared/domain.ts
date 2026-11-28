@@ -205,6 +205,7 @@ export interface Payment {
   status: PaymentStatus;
   createdAtUtc: string;
   note: string;
+  receiptFolio?: string | null;
 }
 
 export interface MoneyIncident {
@@ -275,6 +276,15 @@ export interface ExcelImportRecord {
   rowsRejected: number;
 }
 
+export interface WindowsPrinterConfig {
+  mode: 'system' | 'electron' | 'usb_serial';
+  printerName: string;
+  paperWidthMm: 48;
+  baudRate?: number;
+  vendorId?: number;
+  productId?: number;
+}
+
 export interface AppSettings {
   businessName: string;
   slogan: string;
@@ -284,6 +294,7 @@ export interface AppSettings {
   reduceAnimations: boolean;
   themeMode: 'dark' | 'light';
   nextFolioBySeries: Record<string, number>;
+  printerConfig?: WindowsPrinterConfig;
 }
 
 export interface ProactiveAlert {
@@ -559,6 +570,79 @@ export function calculateCustomerLedger(
     deliveriesCount: validDeliveries.length,
     paymentsCount: customerPayments.length,
   };
+}
+
+export interface CustomerPaymentBalanceInfo {
+  previousBalanceCentavos: number;
+  remainingBalanceCentavos: number;
+  appliedToLabel: string;
+}
+
+/**
+ * Calcula saldo previo, saldo restante y etiqueta aplicada para cada abono/pago de un cliente en orden cronológico.
+ */
+export function computeCustomerPaymentBalances(
+  customerId: string,
+  deliveries: Delivery[],
+  payments: Payment[]
+): Map<string, CustomerPaymentBalanceInfo> {
+  const validDeliveries = deliveries.filter(
+    (d) => d.customerId === customerId && d.status === 'vigente'
+  );
+  const deliveriesById = new Map(deliveries.map((d) => [d.id, d]));
+  const cancelledIds = new Set(
+    deliveries
+      .filter((d) => d.customerId === customerId && d.status === 'cancelada')
+      .map((d) => d.id)
+  );
+  const customerPayments = payments.filter(
+    (p) => p.customerId === customerId && (!p.deliveryId || !cancelledIds.has(p.deliveryId))
+  );
+
+  type TimelineEvent =
+    | { kind: 'delivery'; at: string; order: number; delivery: Delivery }
+    | { kind: 'payment'; at: string; order: number; payment: Payment };
+
+  const events: TimelineEvent[] = [
+    ...validDeliveries.map((delivery, idx) => ({
+      kind: 'delivery' as const,
+      at: delivery.createdAtUtc,
+      order: idx,
+      delivery,
+    })),
+    ...customerPayments.map((payment, idx) => ({
+      kind: 'payment' as const,
+      at: payment.createdAtUtc,
+      order: idx,
+      payment,
+    })),
+  ].sort((a, b) => {
+    const cmp = a.at.localeCompare(b.at);
+    if (cmp !== 0) return cmp;
+    if (a.kind !== b.kind) return a.kind === 'delivery' ? -1 : 1;
+    return a.order - b.order;
+  });
+
+  const result = new Map<string, CustomerPaymentBalanceInfo>();
+  let runningDebt = 0;
+
+  for (const evt of events) {
+    if (evt.kind === 'delivery') {
+      runningDebt += evt.delivery.totalToChargeCentavos;
+    } else {
+      const p = evt.payment;
+      const previousBalanceCentavos = runningDebt;
+      runningDebt = Math.max(0, runningDebt - p.amountCentavos);
+      const linkedDel = p.deliveryId ? deliveriesById.get(p.deliveryId) : undefined;
+      result.set(p.id, {
+        previousBalanceCentavos,
+        remainingBalanceCentavos: runningDebt,
+        appliedToLabel: linkedDel ? `Entrega ${linkedDel.folioFormatted}` : 'Saldo de cuenta',
+      });
+    }
+  }
+
+  return result;
 }
 
 export function normalizeBrandName(brand: string): string {

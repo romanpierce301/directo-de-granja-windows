@@ -201,7 +201,7 @@ class HyhRepositoryTest {
         val creditDelivery = repository.observeDeliveryById(creditId).first()!!
         val settings = repository.getSettingsOnce()
         val client = repository.getClientOnce(clientId)
-        assertEquals(170, com.example.system.PdfDocumentGenerator.TICKET_PAGE_WIDTH_PT)
+        assertEquals(136, com.example.system.PdfDocumentGenerator.TICKET_PAGE_WIDTH_PT)
         assertEquals(369, com.example.system.PdfDocumentGenerator.TICKET_PAGE_HEIGHT_PT)
         val estHeight = com.example.system.PdfDocumentGenerator.measureTicketHeight(
             context = context,
@@ -209,8 +209,8 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        assertEquals(369, estHeight)
-        val pdfCanvasBmp = Bitmap.createBitmap(170, estHeight, Bitmap.Config.ARGB_8888)
+        assertTrue(estHeight >= 369)
+        val pdfCanvasBmp = Bitmap.createBitmap(136, estHeight, Bitmap.Config.ARGB_8888)
         val drawnHeight = com.example.system.PdfDocumentGenerator.renderTicketToCanvas(
             context = context,
             canvas = android.graphics.Canvas(pdfCanvasBmp),
@@ -218,29 +218,25 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        assertTrue("Ticket height ($drawnHeight) must fit within 60x130 height ($estHeight)", drawnHeight <= estHeight)
+        assertTrue("Ticket height ($drawnHeight) must fit within 48mm height ($estHeight)", drawnHeight <= estHeight)
 
         val escPosBytes = com.example.system.ThermalPrinterManager(context)
             .buildEscPosTicketBytes(creditDelivery, settings, client)
         val asciiDump = String(escPosBytes, Charsets.US_ASCII)
-        val asciiSingleLine = asciiDump.replace('\n', ' ')
-        assertTrue(asciiDump.contains("COMPROBANTE DE REMISION"))
-        assertTrue(asciiDump.contains("KILOS NETOS"))
-        assertTrue(asciiDump.contains("Subtotal:"))
-        assertTrue(asciiDump.contains("TOTAL"))
-        assertTrue(asciiDump.contains("RESTA ENTREGA"))
-        assertTrue(asciiDump.contains("Esta remision:"))
-        assertTrue(asciiDump.contains("SALDO TOTAL"))
-        assertTrue(asciiSingleLine.contains("reconozco el saldo pendiente"))
-        assertTrue(asciiDump.contains("Recibi de conformidad"))
+        assertTrue(asciiDump.contains("Folio: ${creditDelivery.folio}"))
+        assertTrue(asciiDump.contains("Kilos totales"))
+        assertTrue(asciiDump.contains("Precio por kilo"))
+        assertTrue(asciiDump.contains("TOTAL A COBRAR"))
+        assertTrue(asciiDump.contains("Pagado (efectivo)"))
+        assertTrue(asciiDump.contains("Saldo de esta entrega"))
+        assertTrue(asciiDump.contains("Saldo total del cliente"))
+        assertTrue(asciiDump.contains("Firma de recibido:"))
+        assertTrue(asciiDump.contains("!Gracias por su compra!"))
         assertTrue(asciiDump.contains("Tienda El Sol"))
-        // Simplified ticket must omit per-box weights, tare, total boxes, and gross total
-        assertTrue(!asciiDump.contains("Cajas:"))
         assertTrue(!asciiDump.contains("Tara total:"))
         assertTrue(!asciiDump.contains("Bruto total:"))
-        assertTrue(!asciiDump.contains("Peso ingresado:"))
 
-        // Pay off the remaining credit balance via abono -> switches to settled credit template
+        // Pay off the remaining credit balance via abono
         repository.recordAbono(clientId, creditId, 1480.0, "Liquidacion total")
         val settledCredit = repository.observeDeliveryById(creditId).first()!!
         assertEquals(0.0, settledCredit.pendingBalanceMxn, 0.001)
@@ -250,7 +246,7 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        val settledBmp = Bitmap.createBitmap(220, settledEstHeight, Bitmap.Config.ARGB_8888)
+        val settledBmp = Bitmap.createBitmap(136, settledEstHeight, Bitmap.Config.ARGB_8888)
         val settledDrawn = com.example.system.PdfDocumentGenerator.renderTicketToCanvas(
             context = context,
             canvas = android.graphics.Canvas(settledBmp),
@@ -265,14 +261,11 @@ class HyhRepositoryTest {
                 .buildEscPosTicketBytes(settledCredit, settings, client),
             Charsets.US_ASCII,
         )
-        val settledSingleLine = settledEscPos.replace('\n', ' ')
-        assertTrue(settledEscPos.contains("LIQUIDADO"))
-        assertTrue(settledEscPos.contains("Esta remision:"))
-        assertTrue(settledSingleLine.contains("cubri el importe total senalado"))
-        assertTrue(settledEscPos.contains("Recibi de conformidad"))
-        assertTrue(!settledEscPos.contains("RESTA ENTREGA"))
+        assertTrue(settledEscPos.contains("Saldo de esta entrega"))
+        assertTrue(settledEscPos.contains("\$0"))
+        assertTrue(settledEscPos.contains("!Gracias por su compra!"))
 
-        // Contado must NOT contain signature or credit commitment legend
+        // Contado delivery
         val cashId = repository.registerDelivery(
             clientId = clientId,
             modality = DeliveryModality.MEDIA_CAJA_PESADA,
@@ -294,9 +287,9 @@ class HyhRepositoryTest {
                 .buildEscPosTicketBytes(cashDelivery, settings, client),
             Charsets.US_ASCII,
         )
-        assertTrue(cashEscPos.contains("LIQUIDADO"))
-        assertTrue(!cashEscPos.contains("Recibi de conformidad"))
-        assertTrue(!cashEscPos.contains("fecha limite de pago"))
+        assertTrue(cashEscPos.contains("TOTAL A COBRAR"))
+        assertTrue(cashEscPos.contains("\$495"))
+        assertTrue(cashEscPos.contains("!Gracias por su compra!"))
     }
 
     @Test
@@ -353,7 +346,7 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        val bmp = Bitmap.createBitmap(170, estHeight, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(136, estHeight, Bitmap.Config.ARGB_8888)
         val drawn = com.example.system.PdfDocumentGenerator.renderTicketToCanvas(
             context = context,
             canvas = android.graphics.Canvas(bmp),
@@ -368,15 +361,13 @@ class HyhRepositoryTest {
                 .buildEscPosTicketBytes(saved, settings, client),
             Charsets.US_ASCII,
         )
-        assertTrue(escPos.contains("Mixta"))
-        assertTrue(escPos.contains("Blanco Selec"))
-        assertTrue(escPos.contains("KILOS NETOS"))
-        assertTrue(escPos.contains("Subtotal:"))
-        assertTrue(escPos.contains("TOTAL"))
-        assertTrue(!escPos.contains("Cajas:"))
+        assertTrue(escPos.contains("Caja 1"))
+        assertTrue(escPos.contains("Caja 2"))
+        assertTrue(escPos.contains("Caja 3"))
+        assertTrue(escPos.contains("Kilos totales"))
+        assertTrue(escPos.contains("TOTAL A COBRAR"))
         assertTrue(!escPos.contains("Tara total:"))
         assertTrue(!escPos.contains("Bruto total:"))
-        assertTrue(!escPos.contains("Peso ingresado:"))
 
         // Export JSON backup and restore into DB cleanly
         val backupRecord = repository.exportFullJsonBackup()
@@ -590,7 +581,7 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        val bmp = Bitmap.createBitmap(220, estHeight, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(136, estHeight, Bitmap.Config.ARGB_8888)
         val drawn = com.example.system.PdfDocumentGenerator.renderTicketToCanvas(
             context = context,
             canvas = android.graphics.Canvas(bmp),
@@ -605,12 +596,10 @@ class HyhRepositoryTest {
                 .buildEscPosTicketBytes(saved, settings, client),
             Charsets.US_ASCII,
         )
-        assertTrue(escPos.contains("Marca Alpha"))
-        assertTrue(escPos.contains("\$42.00"))
-        assertTrue(escPos.contains("\$924.00"))
-        assertTrue(escPos.contains("Marca Beta"))
-        assertTrue(escPos.contains("\$46.50"))
-        assertTrue(escPos.contains("\$697.50"))
+        assertTrue(escPos.contains("Caja 1"))
+        assertTrue(escPos.contains("Caja 2"))
+        assertTrue(escPos.contains("Kilos totales"))
+        assertTrue(escPos.contains("TOTAL A COBRAR"))
 
         // Cancel delivery must revert BOTH brands accurately
         repository.cancelDelivery(deliveryId, "Ajuste multi-marca")
@@ -867,12 +856,10 @@ class HyhRepositoryTest {
             com.example.system.ThermalPrinterManager(context)
                 .buildEscPosTicketBytes(delivery, settings, client),
             Charsets.US_ASCII,
-        ).replace('\n', ' ')
-        assertTrue(escPos.contains("plazo: 21 dias"))
-        assertTrue(escPos.contains("3.5% de interes moratorio mensual"))
-        assertTrue(escPos.contains("Lugar de pago: Bodega Central o transferencia."))
-        assertTrue(escPos.contains("Mercancia revisada al entregar."))
-        assertTrue(escPos.contains("Autorizado con firma digital."))
+        )
+        assertTrue(escPos.contains("Folio: ${delivery.folio}"))
+        assertTrue(escPos.contains("Saldo de esta entrega"))
+        assertTrue(escPos.contains("TOTAL A COBRAR"))
 
         val estHeight = com.example.system.PdfDocumentGenerator.measureTicketHeight(
             context = context,
@@ -880,7 +867,7 @@ class HyhRepositoryTest {
             settings = settings,
             client = client,
         )
-        val bmp = Bitmap.createBitmap(220, estHeight, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(136, estHeight, Bitmap.Config.ARGB_8888)
         val drawn = com.example.system.PdfDocumentGenerator.renderTicketToCanvas(
             context = context,
             canvas = android.graphics.Canvas(bmp),
@@ -975,11 +962,11 @@ class HyhRepositoryTest {
             com.example.system.ThermalPrinterManager(context).buildEscPosTicketBytes(savedMixed, settings, client),
             Charsets.US_ASCII,
         )
-        assertTrue(escPosMixed.contains("Azucar"))
-        assertTrue(escPosMixed.contains("KILOS NETOS"))
+        assertTrue(escPosMixed.contains("Azucar (3 bto)"))
+        assertTrue(escPosMixed.contains("Kilos totales"))
         assertTrue(escPosMixed.contains("170.00 kg"))
-        assertTrue(escPosMixed.contains("Subtotal:"))
-        assertTrue(escPosMixed.contains("\$3,500.00"))
+        assertTrue(escPosMixed.contains("TOTAL A COBRAR"))
+        assertTrue(escPosMixed.contains("\$3,500"))
 
         val pdfFile = com.example.system.PdfDocumentGenerator.generateTicketPdf(context, savedMixed, settings, client)
         assertTrue(pdfFile.exists() && pdfFile.length() > 0L)
@@ -1234,6 +1221,179 @@ class HyhRepositoryTest {
         assertEquals(0.0, sugarInv.remainingSacks, 0.001)
 
         upgradedDb.close()
+        dbFile.delete()
+    }
+
+    @Test
+    fun `standalone partial abonos without new delivery generate AB folio pdf and 48mm escpos ticket`() = runTest {
+        repository.updateBusinessSettings(
+            phone = "5512345678",
+            address = "Bodega Central 8",
+            slogan = "Te faltan huevos a nosotros nos sobran",
+            globalPricePerKg = 42.0,
+        )
+        val clientId = repository.saveClient(
+            name = "Abarrotes La Palma",
+            phone = "5588990011",
+            address = "Calle Hidalgo 40",
+            specialPricePerKg = null,
+        )
+        repository.registerPurchase(
+            purchaseDateMillis = System.currentTimeMillis(),
+            boxes = 20.0,
+            brand = "San Juan",
+            grossWeightKg = 480.0,
+        )
+        val d1Id = repository.registerDelivery(
+            clientId = clientId,
+            modality = DeliveryModality.CAJA_COMPLETA,
+            brand = "San Juan",
+            boxes = 1.0,
+            grossWeightKg = 22.0,
+            tareDeductionKg = 2.0,
+            netWeightKg = 20.0,
+            pricePerKg = 42.0,
+            rawAmountMxn = 840.0,
+            finalAmountMxn = 840.0,
+            paymentMethod = PaymentMethod.CREDITO,
+            initialPaymentMxn = 0.0,
+            signatureBitmap = Bitmap.createBitmap(100, 50, Bitmap.Config.ARGB_8888),
+        )
+        val d2Id = repository.registerDelivery(
+            clientId = clientId,
+            modality = DeliveryModality.CAJA_COMPLETA,
+            brand = "San Juan",
+            boxes = 1.0,
+            grossWeightKg = 22.0,
+            tareDeductionKg = 2.0,
+            netWeightKg = 20.0,
+            pricePerKg = 42.0,
+            rawAmountMxn = 840.0,
+            finalAmountMxn = 840.0,
+            paymentMethod = PaymentMethod.CREDITO,
+            initialPaymentMxn = 0.0,
+            signatureBitmap = Bitmap.createBitmap(100, 50, Bitmap.Config.ARGB_8888),
+        )
+
+        // Standalone general partial abono (deliveryId = 0L) without any new purchase
+        val abonoId = repository.recordAbono(
+            clientId = clientId,
+            deliveryId = 0L,
+            amountMxn = 1000.0,
+            note = "Abono parcial en cobranza",
+            paymentMethod = "transferencia",
+        )
+        val savedAbono = repository.getAbonoOnce(abonoId)!!
+        assertEquals("AB-0001", savedAbono.receiptFolio)
+        assertEquals(0L, savedAbono.deliveryId)
+        assertEquals("Saldo de cuenta", savedAbono.deliveryFolio)
+        assertEquals("transferencia", savedAbono.paymentMethod)
+        assertEquals(1680.0, savedAbono.previousDebtSnapshotMxn, 0.01)
+        assertEquals(680.0, savedAbono.remainingDebtSnapshotMxn, 0.01)
+
+        // Check FIFO local application across deliveries
+        assertEquals(0.0, repository.observeDeliveryById(d1Id).first()!!.pendingBalanceMxn, 0.01)
+        assertEquals(680.0, repository.observeDeliveryById(d2Id).first()!!.pendingBalanceMxn, 0.01)
+
+        // Generate 48mm Abono PDF and ESC/POS bytes
+        val pdfFile = repository.generateAbonoPdf(savedAbono)
+        assertTrue(pdfFile.exists() && pdfFile.length() > 0L)
+        pdfFile.delete()
+
+        val settings = repository.getSettingsOnce()
+        val client = repository.getClientOnce(clientId)
+        val escPos = String(
+            com.example.system.ThermalPrinterManager(context)
+                .buildEscPosAbonoBytes(savedAbono, settings, client, isCopy = true),
+            Charsets.US_ASCII,
+        )
+        assertTrue(escPos.contains("[ COPIA ]"))
+        assertTrue(escPos.contains("COMPROBANTE DE ABONO"))
+        assertTrue(escPos.contains("Folio: AB-0001"))
+        assertTrue(escPos.contains("Aplica a:"))
+        assertTrue(escPos.contains("Saldo de cuenta"))
+        assertTrue(escPos.contains("Saldo anterior"))
+        assertTrue(escPos.contains("ABONO RECIBIDO"))
+        assertTrue(escPos.contains("Transferencia"))
+        assertTrue(escPos.contains("Por verificar"))
+        assertTrue(escPos.contains("SALDO RESTANTE"))
+        assertTrue(escPos.contains("!Gracias por su abono!"))
+    }
+
+    @Test
+    fun `migration 11 to 12 adds abono ticket columns and nextAbonoSequence cleanly`() = runTest {
+        val dbFile = File(context.cacheDir, "migration_v11_to_v12_test.db").apply { delete() }
+        val helper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbFile.absolutePath)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(11) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        db.execSQL(
+                            """
+                            CREATE TABLE IF NOT EXISTS abonos (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                                clientId INTEGER NOT NULL,
+                                deliveryId INTEGER NOT NULL,
+                                deliveryFolio TEXT NOT NULL,
+                                amountMxn REAL NOT NULL,
+                                dateMillis INTEGER NOT NULL,
+                                note TEXT NOT NULL,
+                                isCancelled INTEGER NOT NULL,
+                                salesChannel TEXT NOT NULL DEFAULT 'PUBLIC',
+                                localId TEXT NOT NULL DEFAULT '',
+                                syncStatus TEXT NOT NULL DEFAULT 'LOCAL'
+                            )
+                            """.trimIndent(),
+                        )
+                        db.execSQL(
+                            """
+                            CREATE TABLE IF NOT EXISTS business_settings (
+                                id INTEGER NOT NULL PRIMARY KEY,
+                                businessName TEXT NOT NULL,
+                                slogan TEXT NOT NULL,
+                                phone TEXT NOT NULL,
+                                address TEXT NOT NULL,
+                                globalPricePerKg REAL NOT NULL,
+                                printerType TEXT NOT NULL,
+                                printerName TEXT NOT NULL,
+                                printerAddress TEXT NOT NULL,
+                                printerTransport TEXT NOT NULL DEFAULT 'AUTO',
+                                nextFolioSequence INTEGER NOT NULL,
+                                nextClosingSequence INTEGER NOT NULL,
+                                nextCremeriaFolioSequence INTEGER NOT NULL DEFAULT 1,
+                                creditTermDays INTEGER NOT NULL DEFAULT 7,
+                                creditMoratoriumInterestPercent REAL NOT NULL DEFAULT 0.0,
+                                creditPaymentPlace TEXT NOT NULL DEFAULT '',
+                                creditLegendExtra TEXT NOT NULL DEFAULT '',
+                                creditLegendClosing TEXT NOT NULL DEFAULT 'Válido con firma digital.'
+                            )
+                            """.trimIndent(),
+                        )
+                        db.execSQL("INSERT INTO abonos (id, clientId, deliveryId, deliveryFolio, amountMxn, dateMillis, note, isCancelled) VALUES (1, 1, 0, 'Saldo de cuenta', 500.0, 1700000000000, 'Abono v11', 0)")
+                        db.execSQL("INSERT INTO business_settings (id, businessName, slogan, phone, address, globalPricePerKg, printerType, printerName, printerAddress, nextFolioSequence, nextClosingSequence) VALUES (1, 'Directo de Granja', 'Te faltan huevos a nosotros nos sobran', '5511223344', 'Nave 1', 42.0, 'BLUETOOTH', '', '', 5, 2)")
+                    }
+
+                    override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+                })
+                .build(),
+        )
+        val sqlDb = helper.writableDatabase
+        HyhDatabase.MIGRATION_11_12.migrate(sqlDb)
+
+        val abCursor = sqlDb.query("SELECT paymentMethod, receiptFolio, previousDebtSnapshotMxn, remainingDebtSnapshotMxn FROM abonos WHERE id = 1")
+        assertTrue(abCursor.moveToFirst())
+        assertEquals("efectivo", abCursor.getString(0))
+        assertEquals("", abCursor.getString(1))
+        assertEquals(0.0, abCursor.getDouble(2), 0.001)
+        assertEquals(0.0, abCursor.getDouble(3), 0.001)
+        abCursor.close()
+
+        val setCursor = sqlDb.query("SELECT nextAbonoSequence FROM business_settings WHERE id = 1")
+        assertTrue(setCursor.moveToFirst())
+        assertEquals(1, setCursor.getInt(0))
+        setCursor.close()
+
+        sqlDb.close()
         dbFile.delete()
     }
 }

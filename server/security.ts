@@ -8,7 +8,10 @@ import fs from 'fs';
 import path from 'path';
 
 // Load .env if present (file is excluded from Git via .gitignore)
-const envPath = path.resolve(process.cwd(), '.env');
+const baseEnvDir = process.env.APP_USER_DATA_DIR?.trim()
+  ? path.resolve(process.env.APP_USER_DATA_DIR.trim())
+  : process.cwd();
+const envPath = path.join(baseEnvDir, '.env');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
 } else {

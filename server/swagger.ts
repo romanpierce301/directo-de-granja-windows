@@ -29,8 +29,8 @@ export const swaggerSpec = {
         type: 'object',
         required: ['email', 'password'],
         properties: {
-          email: { type: 'string', example: 'usuario@tunegocio.ejemplo' },
-          password: { type: 'string', example: 'CONTRASEGURA_EJEMPLO' },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string', format: 'password' },
         },
       },
       SyncPushPayload: {

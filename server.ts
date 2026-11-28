@@ -7,8 +7,8 @@ import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
+import os from 'os';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer as createViteServer } from 'vite';
 import {
   calculateBrandInventory,
   calculateCustomerLedger,
@@ -65,9 +65,21 @@ import {
 import { store } from './server/store.ts';
 import { swaggerSpec } from './server/swagger.ts';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-validateSecurityKeys();
+function getLanUrls(port: number): string[] {
+  const urls: string[] = [];
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    if (!list) continue;
+    for (const item of list) {
+      if (item.family === 'IPv4' && !item.internal) {
+        urls.push(`http://${item.address}:${port}`);
+      }
+    }
+  }
+  return urls;
+}
 
 export function requireAuth(req: AuthenticatedRequest, res: express.Response, next: express.NextFunction): void {
   baseRequireAuth(req, res, () => {
@@ -112,7 +124,11 @@ export function requireAuth(req: AuthenticatedRequest, res: express.Response, ne
   });
 }
 
-async function bootstrap() {
+export async function startBackendServer(): Promise<{
+  port: number;
+  close: () => Promise<void>;
+}> {
+  validateSecurityKeys();
   const app = express();
   const httpServer = http.createServer(app);
   const isProduction = process.env.NODE_ENV === 'production';
@@ -169,6 +185,8 @@ async function bootstrap() {
         helmet({ contentSecurityPolicy: false })(req, res, next);
         return;
       }
+      const localHttp =
+        isLocalHostOrIp(req.headers.host) || process.env.ALLOW_INSECURE_HTTP === 'true';
       helmet({
         contentSecurityPolicy: {
           directives: {
@@ -182,8 +200,10 @@ async function bootstrap() {
             baseUri: ["'self'"],
             frameAncestors: ["'self'"],
             formAction: ["'self'"],
+            upgradeInsecureRequests: localHttp ? null : [],
           },
         },
+        ...(localHttp ? { strictTransportSecurity: false } : {}),
         referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       })(req, res, next);
     });
@@ -416,6 +436,7 @@ async function bootstrap() {
       storage: storageInfo,
       timestampUtc: new Date().toISOString(),
       activeWsClients: wsClients.size,
+      lanUrls: getLanUrls(PORT),
       metrics: {
         deliveriesCount: db.deliveries.length,
         customersCount: db.customers.filter((c) => !c.mergedIntoCustomerId).length,
@@ -1249,30 +1270,45 @@ async function bootstrap() {
       return;
     }
 
-    // Apply by default to oldest unpaid delivery if applicable
-    const oldestValid = db.deliveries
-      .filter((d) => d.customerId === customer.id && d.status === 'vigente')
+    // Apply by default to oldest actually-unpaid delivery (FIFO), or account-level if none/general
+    const paidByDelivery = new Map<string, number>();
+    for (const p of db.payments) {
+      if (p.deliveryId) {
+        paidByDelivery.set(p.deliveryId, (paidByDelivery.get(p.deliveryId) ?? 0) + p.amountCentavos);
+      }
+    }
+    const oldestUnpaid = db.deliveries
+      .filter((d) => {
+        if (d.customerId !== customer.id || d.status !== 'vigente') return false;
+        const paid = paidByDelivery.get(d.id) ?? 0;
+        return paid < d.totalToChargeCentavos;
+      })
       .sort((a, b) => a.createdAtUtc.localeCompare(b.createdAtUtc))[0];
+
+    const abonoFolio = store.reserveNextFolio('AB').folioFormatted;
+    const previousBalanceCentavos = ledger.balanceCentavos;
+    const newBalanceCentavos = Math.max(0, previousBalanceCentavos - amountCentavos);
 
     const payment: Payment = {
       id: `pay-${crypto.randomUUID()}`,
       customerId: customer.id,
-      deliveryId: oldestValid?.id ?? null,
+      deliveryId: oldestUnpaid?.id ?? null,
       vendorId: req.user!.sub,
       amountCentavos,
       method,
       status: method === 'efectivo' ? 'verificado' : 'por_verificar',
       createdAtUtc: new Date().toISOString(),
       note,
+      receiptFolio: abonoFolio,
     };
 
     db.payments.push(payment);
-    if (oldestValid) {
+    if (oldestUnpaid) {
       db.deliveryEvents.push({
         id: `evt-${crypto.randomUUID()}`,
-        deliveryId: oldestValid.id,
+        deliveryId: oldestUnpaid.id,
         eventType: 'abono',
-        detail: `Abono posterior ${formatCurrencyFromCentavos(amountCentavos)} (${method})`,
+        detail: `Abono ${abonoFolio} ${formatCurrencyFromCentavos(amountCentavos)} (${method})`,
         actorUserId: req.user!.sub,
         actorName: req.user!.name,
         deviceId: 'win-owner-desktop',
@@ -1284,13 +1320,18 @@ async function bootstrap() {
       'payments',
       payment.id,
       'ABONO_CLIENTE',
-      `Abono ${formatCurrencyFromCentavos(amountCentavos)} registrado a ${customer.businessName}`,
+      `Abono ${abonoFolio} por ${formatCurrencyFromCentavos(amountCentavos)} registrado a ${customer.businessName}`,
       req.user!.sub,
       req.user!.name
     );
     store.persist();
-    broadcastEvent('sync:state_updated', { entity: 'payments' });
-    res.status(201).json({ payment });
+    broadcastEvent('sync:state_updated', { entity: 'payments', customerId: customer.id });
+    res.status(201).json({
+      ok: true,
+      payment,
+      previousBalanceCentavos,
+      newBalanceCentavos,
+    });
   });
 
   app.post('/api/customers/merge', requireAuth, requireRole('dueno'), (req: AuthenticatedRequest, res) => {
@@ -1569,11 +1610,44 @@ async function bootstrap() {
       }
       db.settings.profilePictureUrl = imgCheck.value;
     }
+    if (req.body?.printerConfig && typeof req.body.printerConfig === 'object') {
+      const pc = req.body.printerConfig as Record<string, unknown>;
+      const mode =
+        pc.mode === 'electron' || pc.mode === 'usb_serial' || pc.mode === 'system'
+          ? pc.mode
+          : null;
+      if (!mode) {
+        res.status(400).json({ error: 'Modo de impresora inválido.' });
+        return;
+      }
+      const printerName = sanitizePlainText(pc.printerName, 120);
+      const rawBaud = pc.baudRate !== undefined ? Number(pc.baudRate) : 9600;
+      if (!Number.isInteger(rawBaud) || rawBaud < 1200 || rawBaud > 921600) {
+        res.status(400).json({ error: 'Velocidad (baud rate) de impresora inválida.' });
+        return;
+      }
+      const vendorId =
+        pc.vendorId !== undefined && Number.isInteger(Number(pc.vendorId)) && Number(pc.vendorId) >= 0
+          ? Number(pc.vendorId)
+          : undefined;
+      const productId =
+        pc.productId !== undefined && Number.isInteger(Number(pc.productId)) && Number(pc.productId) >= 0
+          ? Number(pc.productId)
+          : undefined;
+      db.settings.printerConfig = {
+        mode,
+        printerName,
+        paperWidthMm: 48,
+        baudRate: rawBaud,
+        ...(vendorId !== undefined ? { vendorId } : {}),
+        ...(productId !== undefined ? { productId } : {}),
+      };
+    }
     store.addAudit(
       'settings',
       'global',
       'ACTUALIZAR_AJUSTES',
-      'Configuración del negocio y preferencias de Windows actualizadas',
+      'Configuración del negocio, impresora y preferencias de Windows actualizadas',
       req.user!.sub,
       req.user!.name
     );
@@ -2309,9 +2383,11 @@ async function bootstrap() {
 
   app.post('/api/sync/push', syncLimiter, requireAuth, (req: AuthenticatedRequest, res) => {
     const db = store.getDb();
-    const isOwnerSim = req.user!.role === 'dueno' && req.body?.simulateFromVendorId;
-    const vendorId = isOwnerSim ? String(req.body.simulateFromVendorId) : req.user!.sub;
-    const vendor = db.users.find((u) => u.id === vendorId && u.role === 'vendedor');
+    if (req.user!.role !== 'vendedor') {
+      res.status(403).json({ error: 'Solo cuentas de vendedor autorizadas pueden sincronizar entregas.' });
+      return;
+    }
+    const vendor = db.users.find((u) => u.id === req.user!.sub && u.role === 'vendedor');
 
     if (!vendor) {
       res.status(404).json({ error: 'Vendedor inválido para sincronización.' });
@@ -2323,16 +2399,12 @@ async function bootstrap() {
     }
 
     const deviceId = sanitizePlainText(req.body?.deviceId, 80) || 'android-app';
-    let registeredDevice = db.devices.find((d) => d.id === deviceId && d.userId === vendor.id);
-    if (!isOwnerSim) {
-      if (!registeredDevice || !registeredDevice.active) {
-        res.status(403).json({
-          error: 'Este teléfono no está autorizado como equipo activo del vendedor en Windows.',
-        });
-        return;
-      }
-    } else if (!registeredDevice) {
-      registeredDevice = db.devices.find((d) => d.userId === vendor.id && d.active);
+    const registeredDevice = db.devices.find((d) => d.id === deviceId && d.userId === vendor.id);
+    if (!registeredDevice || !registeredDevice.active) {
+      res.status(403).json({
+        error: 'Este teléfono no está autorizado como equipo activo del vendedor en Windows.',
+      });
+      return;
     }
 
     const incomingDeliveries = Array.isArray(req.body?.deliveries)
@@ -2591,7 +2663,7 @@ async function bootstrap() {
           )
           .join(', ');
       } else {
-        // Legacy flat boxesGrams payload (used by simulateAndroidSync & legacy clients)
+        // Carga plana boxesGrams compatible con clientes de sincronización móviles
         const boxesGrams: number[] = Array.isArray(rawDel.boxesGrams)
           ? rawDel.boxesGrams.slice(0, 500).map((g: unknown) => Math.round(Number(g)))
           : [];
@@ -2732,7 +2804,8 @@ async function bootstrap() {
       if (!Number.isInteger(amountCentavos) || amountCentavos <= 0 || amountCentavos > 100_000_000) continue;
 
       const customerId = sanitizePlainText(rawPay.customerId, 80);
-      if (!db.customers.some((c) => c.id === customerId && !c.mergedIntoCustomerId)) continue;
+      const customerRecord = db.customers.find((c) => c.id === customerId && !c.mergedIntoCustomerId);
+      if (!customerRecord) continue;
       const deliveryId = rawPay.deliveryId ? sanitizePlainText(rawPay.deliveryId, 80) : null;
       if (deliveryId) {
         const linkedDel = db.deliveries.find((d) => d.id === deliveryId);
@@ -2741,11 +2814,19 @@ async function bootstrap() {
           .filter((p) => p.deliveryId === deliveryId)
           .reduce((acc, p) => acc + p.amountCentavos, 0);
         if (alreadyPaid + amountCentavos > linkedDel.totalToChargeCentavos) continue;
+      } else {
+        // Standalone partial abono without a specific delivery: verify against customer ledger balance
+        const customerLedger = calculateCustomerLedger(customerId, db.deliveries, db.payments);
+        if (customerLedger.balanceCentavos <= 0 || amountCentavos > customerLedger.balanceCentavos) {
+          continue;
+        }
       }
 
       const rawPayCreated = sanitizePlainText(rawPay.createdAtUtc, 40);
       const safePayCreatedUtc =
         rawPayCreated && isValidIsoUtc(rawPayCreated) ? rawPayCreated : nowUtc;
+      const receiptFolio =
+        sanitizePlainText(rawPay.receiptFolio, 40) || store.reserveNextFolio('AB').folioFormatted;
       db.payments.push({
         id: payId,
         customerId,
@@ -2755,8 +2836,17 @@ async function bootstrap() {
         method,
         status: method === 'efectivo' ? 'verificado' : 'por_verificar',
         createdAtUtc: safePayCreatedUtc,
-        note: sanitizePlainText(rawPay.note, 160) || 'Cobro en ruta Android',
+        note: sanitizePlainText(rawPay.note, 160) || 'Abono en ruta Android',
+        receiptFolio,
       });
+      store.addAudit(
+        'payments',
+        payId,
+        'ABONO_RUTA_ANDROID',
+        `Abono ${receiptFolio} por ${formatCurrencyFromCentavos(amountCentavos)} (${method}) sincronizado para ${customerRecord.businessName}`,
+        vendor.id,
+        vendor.name
+      );
       acceptedPaymentIds.push(payId);
     }
 
@@ -2906,25 +2996,58 @@ async function bootstrap() {
 
   // Vite dev middleware vs static production build
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distDir = path.resolve(process.cwd(), 'dist');
+    const distDir = process.env.APP_DIST_DIR?.trim()
+      ? path.resolve(process.env.APP_DIST_DIR.trim())
+      : path.resolve(process.cwd(), 'dist');
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'));
     });
   }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Directo de Granja Windows Desktop & Real-Time Backend running on http://0.0.0.0:${PORT}`);
+  await new Promise<void>((resolve) => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`Directo de Granja Windows Desktop & Real-Time Backend running on http://0.0.0.0:${PORT}`);
+      resolve();
+    });
   });
+
+  return {
+    port: PORT,
+    close: async () => {
+      for (const client of wsClients) {
+        try {
+          client.ws.close(1001, 'Cerrando aplicación de escritorio');
+        } catch {
+          // Ignore close error
+        }
+      }
+      await new Promise<void>((resolve) => {
+        wss.close(() => {
+          httpServer.close(() => {
+            try {
+              store.close();
+            } catch {
+              // Ignore
+            }
+            resolve();
+          });
+        });
+      });
+    },
+  };
 }
 
-bootstrap().catch((err) => {
-  console.error('Fatal startup error:', err);
-  process.exit(1);
-});
+if (process.env.SKIP_AUTO_START !== '1') {
+  startBackendServer().catch((err) => {
+    console.error('Fatal startup error:', err);
+    process.exit(1);
+  });
+}

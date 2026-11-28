@@ -15,59 +15,14 @@ import {
   formatKgFromGrams,
   formatMexicoCityDate,
   formatMexicoCityTime,
-  type Delivery,
-  type DeliveryBox,
-  type Payment,
 } from '../../shared/domain.ts';
 import { apiClient, type DashboardState } from '../services/apiClient.ts';
+import {
+  buildEscPosDeliveryTicketBytes,
+  printTicket48mm,
+} from '../services/windowsPrinter.ts';
 import { TactileButton } from '../components/TactileButton.tsx';
 import { Ticket48mm } from '../components/Ticket48mm.tsx';
-
-// Ejemplo visual oficial únicamente para vista previa de plantilla 48mm (no se guarda en base de datos)
-const OFFICIAL_SAMPLE_DELIVERY: Delivery = {
-  id: 'preview-official-ticket',
-  vendorId: 'preview',
-  vendorName: 'Ejemplo oficial',
-  workdayId: 'preview',
-  driverName: 'Chofer',
-  helpersNames: [],
-  series: 'A',
-  folioNumber: 1,
-  folioFormatted: 'A-0001',
-  customerId: 'preview-cust',
-  customerName: 'Abarrotes López',
-  createdAtUtc: '2026-11-15T16:42:00.000Z', // 15/11/2026 10:42 America/Mexico_City
-  priceCentavosPerKg: 3700,
-  isSpecialPrice: false,
-  totalGrams: 120600,
-  calculatedTotalExactMilliCentavos: 446220000,
-  totalToChargeCentavos: 446200,
-  status: 'vigente',
-  cancellationReason: null,
-  syncedAtUtc: null,
-};
-
-const OFFICIAL_SAMPLE_BOXES: DeliveryBox[] = [
-  { id: 'prev-b1', deliveryId: 'preview-official-ticket', position: 1, weightGrams: 25350 },
-  { id: 'prev-b2', deliveryId: 'preview-official-ticket', position: 2, weightGrams: 24450 },
-  { id: 'prev-b3', deliveryId: 'preview-official-ticket', position: 3, weightGrams: 25120 },
-  { id: 'prev-b4', deliveryId: 'preview-official-ticket', position: 4, weightGrams: 22780 },
-  { id: 'prev-b5', deliveryId: 'preview-official-ticket', position: 5, weightGrams: 22900 },
-];
-
-const OFFICIAL_SAMPLE_PAYMENTS: Payment[] = [
-  {
-    id: 'prev-pay-1',
-    customerId: 'preview-cust',
-    deliveryId: 'preview-official-ticket',
-    vendorId: 'preview',
-    amountCentavos: 80000,
-    method: 'efectivo',
-    status: 'verificado',
-    createdAtUtc: '2026-11-15T16:42:00.000Z',
-    note: 'Pago ejemplo plantilla oficial',
-  },
-];
 
 interface EntregasViewProps {
   state: DashboardState;
@@ -80,7 +35,6 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'vigente' | 'cancelada'>('all');
   const [selectedId, setSelectedId] = useState<string>(state.deliveries[0]?.id ?? '');
-  const [showOfficialSample, setShowOfficialSample] = useState<boolean>(false);
   const [isCopyPreview, setIsCopyPreview] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelBox, setShowCancelBox] = useState(false);
@@ -123,17 +77,46 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
     ? calculateCustomerLedger(selectedDelivery.customerId, state.deliveries, state.payments)
     : null;
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (!selectedDelivery || !customerLedger) return;
     setIsCopyPreview(false);
-    window.setTimeout(() => window.print(), 60);
+    try {
+      await new Promise((r) => window.setTimeout(r, 80));
+      const escPos = buildEscPosDeliveryTicketBytes({
+        delivery: selectedDelivery,
+        boxes: selectedBoxes,
+        payments: selectedPayments,
+        customerTotalBalanceCentavos: customerLedger.balanceCentavos,
+        settings: state.settings,
+        isCopy: false,
+      });
+      const msg = await printTicket48mm(state.settings.printerConfig, escPos);
+      onNotify(msg);
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
   };
 
   const handleReprintCopy = async () => {
-    if (!selectedDelivery) return;
+    if (!selectedDelivery || !customerLedger) return;
     setIsCopyPreview(true);
-    await apiClient.logReprint(selectedDelivery.id);
-    await onRefresh();
-    window.setTimeout(() => window.print(), 80);
+    try {
+      await apiClient.logReprint(selectedDelivery.id);
+      await onRefresh();
+      await new Promise((r) => window.setTimeout(r, 80));
+      const escPos = buildEscPosDeliveryTicketBytes({
+        delivery: selectedDelivery,
+        boxes: selectedBoxes,
+        payments: selectedPayments,
+        customerTotalBalanceCentavos: customerLedger.balanceCentavos,
+        settings: state.settings,
+        isCopy: true,
+      });
+      const msg = await printTicket48mm(state.settings.printerConfig, escPos);
+      onNotify(msg);
+    } catch (err) {
+      onNotify((err as Error).message);
+    }
   };
 
   const handleVerifyTransfer = async (paymentId: string) => {
@@ -241,7 +224,6 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
                         key={del.id}
                         onClick={() => {
                           setSelectedId(del.id);
-                          setShowOfficialSample(false);
                           setIsCopyPreview(false);
                           setShowCancelBox(false);
                         }}
@@ -470,29 +452,15 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#8A2BE2] dark:text-[#C084FC]" />
               <h3 className="text-sm font-bold text-[#130824] dark:text-[#F4EFFF]">
-                Plantilla oficial de ticket 48mm
+                Ticket térmico 48mm
               </h3>
             </div>
-            <div className="flex items-center gap-2">
-              {selectedDelivery && (
-                <TactileButton
-                  variant={showOfficialSample ? 'primary' : 'neutral'}
-                  size="sm"
-                  onClick={() => {
-                    setShowOfficialSample((v) => !v);
-                    setIsCopyPreview(false);
-                  }}
-                >
-                  {showOfficialSample ? 'Ver entrega real' : 'Ver ejemplo oficial'}
-                </TactileButton>
-              )}
-              <span className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
-                Ancho térmico 48mm
-              </span>
-            </div>
+            <span className="text-[11px] font-mono text-[#6B5B82] dark:text-[#9E8FB2]">
+              Ancho térmico 48mm
+            </span>
           </div>
 
-          {selectedDelivery && customerLedger && !showOfficialSample ? (
+          {selectedDelivery && customerLedger ? (
             <Ticket48mm
               delivery={selectedDelivery}
               boxes={selectedBoxes}
@@ -504,19 +472,14 @@ export function EntregasView({ state, onRefresh, onNotify }: EntregasViewProps) 
               onReprint={handleReprintCopy}
             />
           ) : (
-            <div className="space-y-3">
-              <div className="rounded border border-[#8A2BE2]/40 bg-[#8A2BE2]/10 px-3 py-2 text-[11px] text-[#681AB8] dark:text-[#C084FC] text-center">
-                Ejemplo visual oficial de plantilla 48mm (solo demostración visual; no afecta datos ni inventarios reales).
+            <div className="pos-subpanel rounded-md p-6 text-center space-y-2">
+              <FileText className="w-6 h-6 mx-auto text-[#9E8FB2]" />
+              <div className="text-xs font-semibold text-[#130824] dark:text-[#F4EFFF]">
+                Ninguna entrega seleccionada
               </div>
-              <Ticket48mm
-                delivery={OFFICIAL_SAMPLE_DELIVERY}
-                boxes={OFFICIAL_SAMPLE_BOXES}
-                payments={OFFICIAL_SAMPLE_PAYMENTS}
-                customerTotalBalanceCentavos={366200}
-                settings={state.settings}
-                isCopy={false}
-                onPrint={handlePrint}
-              />
+              <p className="text-[11px] text-[#6B5B82] dark:text-[#9E8FB2]">
+                Selecciona una entrega registrada en la tabla para visualizar e imprimir su ticket térmico de 48 mm.
+              </p>
             </div>
           )}
         </div>

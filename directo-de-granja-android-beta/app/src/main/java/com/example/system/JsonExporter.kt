@@ -205,6 +205,10 @@ object JsonExporter {
                         put("note", a.note)
                         put("isCancelled", a.isCancelled)
                         put("salesChannel", a.salesChannel)
+                        put("paymentMethod", a.paymentMethod)
+                        put("previousDebtSnapshotMxn", a.previousDebtSnapshotMxn)
+                        put("remainingDebtSnapshotMxn", a.remainingDebtSnapshotMxn)
+                        put("receiptFolio", a.receiptFolio)
                     },
                 )
             }
@@ -265,6 +269,7 @@ object JsonExporter {
             put("nextFolioSequence", settings.nextFolioSequence)
             put("nextCremeriaFolioSequence", settings.nextCremeriaFolioSequence)
             put("nextClosingSequence", settings.nextClosingSequence)
+            put("nextAbonoSequence", settings.nextAbonoSequence)
             put("creditTermDays", settings.creditTermDays)
             put("creditMoratoriumInterestPercent", settings.creditMoratoriumInterestPercent)
             put("creditPaymentPlace", settings.creditPaymentPlace)

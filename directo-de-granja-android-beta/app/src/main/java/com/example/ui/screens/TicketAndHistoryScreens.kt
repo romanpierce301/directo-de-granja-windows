@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.example.data.local.entity.AbonoEntity
 import com.example.data.local.entity.BusinessSettingsEntity
 import com.example.data.local.entity.ClientEntity
 import com.example.data.local.entity.DeliveryEntity
@@ -66,7 +67,8 @@ import com.example.ui.components.AuroraPrimaryButton
 import com.example.ui.components.AuroraStatusBadge
 import com.example.ui.components.AuroraTextField
 import com.example.ui.components.AuroraTopBar
-import com.example.ui.components.ThermalTicket60mmView
+import com.example.ui.components.ThermalAbonoTicket48mmView
+import com.example.ui.components.ThermalTicket48mmView
 import com.example.ui.theme.Error
 import com.example.ui.theme.ErrorContainer
 import com.example.ui.theme.OnErrorContainer
@@ -91,12 +93,13 @@ fun TicketScreen(
     client: ClientEntity?,
     settings: BusinessSettingsEntity,
     onBack: () -> Unit,
-    onPrint: (DeliveryEntity) -> Unit,
+    onPrint: (DeliveryEntity, Boolean) -> Unit,
     onShareWhatsApp: (DeliveryEntity) -> Unit,
     onDownloadPdf: (DeliveryEntity) -> Unit,
     onDownloadJson: (DeliveryEntity) -> Unit,
     onCancelDelivery: (deliveryId: Long, reason: String) -> Unit,
     allowCancel: Boolean = true,
+    liveCustomerTotalDebtMxn: Double? = null,
 ) {
     if (delivery == null) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -118,6 +121,7 @@ fun TicketScreen(
     }
 
     var showCancelDialog by remember { mutableStateOf(false) }
+    var isCopyPreview by remember { mutableStateOf(false) }
     var signatureBitmap by remember(delivery.signaturePath) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(delivery.signaturePath) {
         signatureBitmap = withContext(Dispatchers.IO) {
@@ -129,7 +133,7 @@ fun TicketScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         AuroraTopBar(
-            title = "Ticket 60 mm",
+            title = "Ticket 48 mm",
             subtitle = "${delivery.folio} • ${PaymentMethod.fromDb(delivery.paymentMethod).label}",
             showDrawerMenu = false,
             onMenuOrBackClick = onBack,
@@ -149,11 +153,13 @@ fun TicketScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ThermalTicket60mmView(
+            ThermalTicket48mmView(
                 delivery = delivery,
                 client = client,
                 settings = settings,
                 signatureBitmap = signatureBitmap,
+                isCopy = isCopyPreview,
+                liveCustomerTotalDebtMxn = liveCustomerTotalDebtMxn,
             )
 
             AuroraCard {
@@ -165,10 +171,24 @@ fun TicketScreen(
                 Spacer(Modifier.height(12.dp))
 
                 AuroraPrimaryButton(
-                    text = "Imprimir (60 mm)",
+                    text = "Imprimir (48 mm)",
                     icon = Icons.Default.Print,
-                    onClick = { onPrint(delivery) },
+                    onClick = { onPrint(delivery, isCopyPreview) },
                     testTag = "ticket_print_button",
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                AuroraOutlinedButton(
+                    text = if (isCopyPreview) "Imprimir COPIA (48 mm)" else "Reimprimir como COPIA",
+                    icon = Icons.Default.Print,
+                    onClick = {
+                        isCopyPreview = true
+                        onPrint(delivery, true)
+                    },
+                    accentColor = Secondary,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "ticket_reprint_copy_button",
                 )
 
                 Spacer(Modifier.height(10.dp))
@@ -228,6 +248,123 @@ fun TicketScreen(
                 showCancelDialog = false
             },
         )
+    }
+}
+
+@Composable
+fun AbonoTicketScreen(
+    abono: AbonoEntity?,
+    client: ClientEntity?,
+    settings: BusinessSettingsEntity,
+    onBack: () -> Unit,
+    onPrint: (AbonoEntity, Boolean) -> Unit,
+    onShareWhatsApp: (AbonoEntity) -> Unit,
+    onDownloadPdf: (AbonoEntity) -> Unit,
+) {
+    if (abono == null) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            AuroraTopBar(title = "Ticket de Abono", showDrawerMenu = false, onMenuOrBackClick = onBack)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                AuroraEmptyState(
+                    icon = Icons.Default.ReceiptLong,
+                    title = "Comprobante de abono no encontrado",
+                    subtitle = "No se encontró el abono solicitado.",
+                )
+            }
+        }
+        return
+    }
+
+    var isCopyPreview by remember { mutableStateOf(false) }
+    val folioDisplay = abono.receiptFolio.ifBlank { "AB-${abono.id.toString().padStart(4, '0')}" }
+    val methodLabel = if (abono.paymentMethod == "transferencia") "Transferencia" else "Efectivo"
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        AuroraTopBar(
+            title = "Ticket Abono 48 mm",
+            subtitle = "$folioDisplay • $methodLabel",
+            showDrawerMenu = false,
+            onMenuOrBackClick = onBack,
+            trailingBadge = {
+                AuroraStatusBadge(
+                    text = if (abono.isCancelled) "CANCELADO" else methodLabel,
+                    tint = if (abono.isCancelled) Error else PrimaryGlow,
+                )
+            },
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            ThermalAbonoTicket48mmView(
+                abono = abono,
+                client = client,
+                settings = settings,
+                isCopy = isCopyPreview,
+            )
+
+            AuroraCard {
+                Text(
+                    text = "Opciones del Comprobante de Abono",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OnSurface,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                AuroraPrimaryButton(
+                    text = "Imprimir (48 mm)",
+                    icon = Icons.Default.Print,
+                    onClick = { onPrint(abono, isCopyPreview) },
+                    testTag = "abono_ticket_print_button",
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                AuroraOutlinedButton(
+                    text = if (isCopyPreview) "Imprimir COPIA (48 mm)" else "Reimprimir como COPIA",
+                    icon = Icons.Default.Print,
+                    onClick = {
+                        isCopyPreview = true
+                        onPrint(abono, true)
+                    },
+                    accentColor = Secondary,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "abono_ticket_reprint_copy_button",
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                AuroraOutlinedButton(
+                    text = "Compartir PDF por WhatsApp",
+                    icon = Icons.Default.Share,
+                    onClick = { onShareWhatsApp(abono) },
+                    accentColor = PrimaryGlow,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "abono_ticket_whatsapp_button",
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                AuroraOutlinedButton(
+                    text = "Descargar PDF",
+                    icon = Icons.Default.PictureAsPdf,
+                    onClick = { onDownloadPdf(abono) },
+                    accentColor = Secondary,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "abono_ticket_download_pdf_button",
+                )
+            }
+        }
     }
 }
 
